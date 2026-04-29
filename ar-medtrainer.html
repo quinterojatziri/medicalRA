@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR MedTrainer — Simulador Anatómico</title>
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.2/aframe/build/aframe-ar.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --teal: #1D9E75; --teal-light: #9FE1CB; --teal-dark: #085041;
+    --coral: #D85A30; --coral-light: #F5C4B3;
+    --purple: #534AB7; --purple-light: #CECBF6;
+    --amber: #BA7517; --amber-light: #FAC775;
+    --bg: #0a0f14; --surface: rgba(10,20,30,0.85);
+    --text: #e8f0f8; --text-dim: rgba(232,240,248,0.55);
+    --border: rgba(255,255,255,0.08);
+    --font: 'SF Pro Display', -apple-system, 'Segoe UI', sans-serif;
+  }
+  body { background: var(--bg); font-family: var(--font); color: var(--text); overflow: hidden; }
+  a-scene { display: none; }
+
+  /* ======= SPLASH SCREEN ======= */
+  #splash {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 1000; padding: 2rem;
+  }
+  .logo-circle {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; margin-bottom: 1.5rem;
+    box-shadow: 0 0 40px rgba(29,158,117,0.4);
+  }
+  #splash h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 0.5rem; }
+  #splash p { font-size: 14px; color: var(--text-dim); text-align: center; margin-bottom: 2.5rem; max-width: 280px; line-height: 1.6; }
+  .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 340px; margin-bottom: 2rem; }
+  .module-card {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1rem; cursor: pointer; transition: all 0.2s;
+    text-align: center;
+  }
+  .module-card:active { transform: scale(0.96); background: rgba(255,255,255,0.08); }
+  .module-card.selected { border-color: var(--teal); background: rgba(29,158,117,0.12); }
+  .module-card .icon { font-size: 28px; margin-bottom: 6px; }
+  .module-card .name { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .module-card .desc { font-size: 10px; color: var(--text-dim); }
+  .btn-primary {
+    width: 100%; max-width: 340px; padding: 16px;
+    background: linear-gradient(135deg, var(--teal), #0F6E56);
+    border: none; border-radius: 14px; color: white;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.2s; letter-spacing: 0.3px;
+  }
+  .btn-primary:active { opacity: 0.8; }
+
+  /* ======= MAIN APP ======= */
+  #app { position: fixed; inset: 0; display: none; flex-direction: column; }
+
+  /* Camera view */
+  #camera-view {
+    flex: 1; position: relative; background: #000;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  #camera-stream { width: 100%; height: 100%; object-fit: cover; }
+  #canvas-ar {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* AR Overlay - 3D model rendered as canvas simulation */
+  #model-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  #model-canvas { border-radius: 8px; }
+
+  /* Marker guide */
+  #marker-guide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .marker-frame {
+    width: 200px; height: 200px;
+    border: 2px dashed rgba(29,158,117,0.6);
+    border-radius: 12px; position: relative;
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+  .marker-frame::before, .marker-frame::after {
+    content: ''; position: absolute;
+    width: 24px; height: 24px;
+    border-color: var(--teal); border-style: solid;
+  }
+  .marker-frame::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+  .marker-frame::after { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+  .marker-text { margin-top: 16px; font-size: 13px; color: var(--teal-light); text-align: center; }
+  @keyframes pulse-border { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+  /* Status bar */
+  #status-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: 48px 16px 12px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 10;
+  }
+  #back-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.12); border: none; color: white;
+    font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  #module-name { font-size: 15px; font-weight: 600; }
+  #step-counter {
+    font-size: 12px; color: var(--text-dim);
+    background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 20px;
+  }
+
+  /* Bottom HUD */
+  #hud-bottom {
+    background: var(--surface); backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    padding: 0 0 env(safe-area-inset-bottom);
+    min-height: 200px;
+  }
+
+  /* Step panel */
+  #step-panel { padding: 16px 16px 0; }
+  .step-progress {
+    display: flex; gap: 4px; margin-bottom: 14px;
+  }
+  .step-dot {
+    flex: 1; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.12); transition: background 0.3s;
+  }
+  .step-dot.done { background: var(--teal); }
+  .step-dot.active { background: var(--amber-light); }
+
+  #step-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  #step-instruction {
+    font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;
+  }
+
+  /* Action buttons */
+  #action-row { display: flex; gap: 8px; padding: 0 16px 12px; }
+  .action-btn {
+    flex: 1; padding: 12px 8px; border-radius: 12px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+    color: var(--text); font-size: 11px; font-weight: 600;
+    cursor: pointer; text-align: center; transition: all 0.2s;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .action-btn .icon { font-size: 18px; }
+  .action-btn:active { transform: scale(0.96); background: rgba(255,255,255,0.1); }
+  .action-btn.primary { background: rgba(29,158,117,0.2); border-color: var(--teal); color: var(--teal-light); }
+  .action-btn.primary:active { background: rgba(29,158,117,0.35); }
+
+  /* Layer selector */
+  #layer-bar {
+    display: flex; gap: 6px; padding: 8px 16px;
+    overflow-x: auto; scrollbar-width: none;
+    border-top: 1px solid var(--border);
+  }
+  #layer-bar::-webkit-scrollbar { display: none; }
+  .layer-chip {
+    flex-shrink: 0; padding: 6px 14px; border-radius: 20px;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .layer-chip.active { background: rgba(83,74,183,0.25); border-color: var(--purple); color: var(--purple-light); }
+
+  /* Procedure panel */
+  #procedure-panel {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(8px); z-index: 20;
+    display: none; flex-direction: column;
+    padding: 60px 20px 40px;
+  }
+  #procedure-panel h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  #procedure-panel p { font-size: 13px; color: var(--text-dim); margin-bottom: 24px; line-height: 1.6; }
+  .proc-zones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; flex: 1; }
+  .proc-zone {
+    background: rgba(255,255,255,0.04); border: 2px solid var(--border);
+    border-radius: 16px; padding: 20px 12px;
+    cursor: pointer; text-align: center; transition: all 0.25s;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .proc-zone:active { transform: scale(0.97); }
+  .proc-zone.correct { border-color: var(--teal); background: rgba(29,158,117,0.15); }
+  .proc-zone.incorrect { border-color: #E24B4A; background: rgba(226,75,74,0.15); animation: shake 0.3s; }
+  .proc-zone .zone-icon { font-size: 32px; }
+  .proc-zone .zone-name { font-size: 13px; font-weight: 600; }
+  .proc-zone .zone-hint { font-size: 10px; color: var(--text-dim); }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+  /* Metrics overlay */
+  #metrics-panel {
+    position: absolute; inset: 0; background: var(--bg);
+    z-index: 30; display: none; flex-direction: column;
+    padding: 60px 20px 40px; overflow-y: auto;
+  }
+  #metrics-panel h2 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  #metrics-panel .subtitle { font-size: 14px; color: var(--text-dim); margin-bottom: 24px; }
+  .score-ring {
+    width: 120px; height: 120px; margin: 0 auto 24px;
+    border-radius: 50%; background: conic-gradient(var(--teal) 0deg, rgba(255,255,255,0.08) 0deg);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .score-inner {
+    width: 90px; height: 90px; border-radius: 50%;
+    background: var(--bg); display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .score-number { font-size: 28px; font-weight: 700; color: var(--teal-light); }
+  .score-label { font-size: 10px; color: var(--text-dim); }
+  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .metric-card {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px;
+  }
+  .metric-card .m-label { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+  .metric-card .m-value { font-size: 22px; font-weight: 700; }
+  .metric-card .m-unit { font-size: 11px; color: var(--text-dim); }
+  .step-times { margin-bottom: 20px; }
+  .step-times h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .step-time-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  }
+  .step-time-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .step-time-fill { height: 100%; border-radius: 3px; background: var(--teal); transition: width 0.8s ease; }
+  .step-time-val { font-size: 11px; color: var(--text-dim); min-width: 42px; text-align: right; }
+
+  /* Survey */
+  #survey-panel {
+    position: absolute; inset: 0; background: var(--bg);
+    z-index: 35; display: none; flex-direction: column;
+    padding: 60px 20px 40px;
+  }
+  #survey-panel h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  #survey-panel .sub { font-size: 13px; color: var(--text-dim); margin-bottom: 24px; }
+  .survey-q { margin-bottom: 24px; }
+  .survey-q label { font-size: 14px; font-weight: 600; display: block; margin-bottom: 10px; }
+  .stars { display: flex; gap: 8px; }
+  .star {
+    font-size: 28px; cursor: pointer; transition: transform 0.1s;
+    opacity: 0.35; filter: grayscale(1);
+  }
+  .star.lit { opacity: 1; filter: none; transform: scale(1.1); }
+  .survey-options { display: flex; flex-direction: column; gap: 8px; }
+  .survey-opt {
+    padding: 12px 16px; border-radius: 12px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+    font-size: 13px; cursor: pointer; transition: all 0.2s;
+  }
+  .survey-opt.selected { border-color: var(--teal); background: rgba(29,158,117,0.12); color: var(--teal-light); }
+
+  /* Toast */
+  #toast {
+    position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+    background: rgba(29,158,117,0.9); color: white;
+    padding: 10px 20px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { background: rgba(226,75,74,0.9); }
+
+  /* Timer badge */
+  #timer-badge {
+    position: absolute; top: 100px; right: 16px;
+    background: rgba(0,0,0,0.5); border: 1px solid var(--border);
+    border-radius: 20px; padding: 6px 12px;
+    font-size: 12px; font-weight: 700; font-family: var(--font);
+    color: var(--amber-light); z-index: 10;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  /* AR Highlight dot */
+  .ar-highlight {
+    position: absolute; width: 20px; height: 20px;
+    border-radius: 50%; background: rgba(250,199,117,0.85);
+    box-shadow: 0 0 12px rgba(250,199,117,0.6);
+    transform: translate(-50%,-50%);
+    animation: ar-pulse 1.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes ar-pulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 1; } 50% { transform: translate(-50%,-50%) scale(1.5); opacity: 0.5; } }
+
+  /* Instrument indicator */
+  #instrument-bar {
+    position: absolute; top: 100px; left: 16px;
+    display: flex; flex-direction: column; gap: 6px; z-index: 10;
+  }
+  .instr-chip {
+    padding: 6px 10px; border-radius: 10px;
+    background: rgba(0,0,0,0.6); border: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px;
+  }
+  .instr-chip.active { border-color: var(--amber); color: var(--amber-light); background: rgba(186,117,23,0.2); }
+
+  /* Scanning animation */
+  #scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(to right, transparent, var(--teal), transparent);
+    animation: scan 2s linear infinite; pointer-events: none; opacity: 0;
+  }
+  #scan-line.scanning { opacity: 1; }
+  @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="logo-circle">⚕️</div>
+  <h1>AR MedTrainer</h1>
+  <p>Simulador anatómico con realidad aumentada. Selecciona el módulo de entrenamiento.</p>
+  <div class="module-grid">
+    <div class="module-card selected" data-module="arm" onclick="selectModule(this,'arm')">
+      <div class="icon">💪</div>
+      <div class="name">Brazo</div>
+      <div class="desc">Capas musculares</div>
+    </div>
+    <div class="module-card" data-module="heart" onclick="selectModule(this,'heart')">
+      <div class="icon">🫀</div>
+      <div class="name">Corazón</div>
+      <div class="desc">Anatomía cardíaca</div>
+    </div>
+    <div class="module-card" data-module="lung" onclick="selectModule(this,'lung')">
+      <div class="icon">🫁</div>
+      <div class="name">Pulmones</div>
+      <div class="desc">Sistema resp.</div>
+    </div>
+    <div class="module-card" data-module="catheter" onclick="selectModule(this,'catheter')">
+      <div class="icon">🩺</div>
+      <div class="name">Catéter IV</div>
+      <div class="desc">Procedimiento</div>
+    </div>
+  </div>
+  <button class="btn-primary" onclick="startApp()">Iniciar entrenamiento →</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <!-- Camera area -->
+  <div id="camera-view">
+    <video id="camera-stream" autoplay muted playsinline></video>
+    <canvas id="model-canvas" width="320" height="320"></canvas>
+    <div id="scan-line" class="scanning"></div>
+
+    <!-- Marker guide (shown before detection) -->
+    <div id="marker-guide">
+      <div class="marker-frame"></div>
+      <p class="marker-text">Apunta al marcador Hiro<br>o a una superficie plana</p>
+    </div>
+
+    <!-- AR Highlights -->
+    <div id="ar-highlights"></div>
+
+    <!-- Status bar -->
+    <div id="status-bar">
+      <button id="back-btn" onclick="goBack()">←</button>
+      <span id="module-name">Brazo Humano</span>
+      <span id="step-counter">Paso 1 / 5</span>
+    </div>
+
+    <!-- Timer -->
+    <div id="timer-badge">⏱ <span id="timer-display">0:00</span></div>
+
+    <!-- Instrument bar -->
+    <div id="instrument-bar">
+      <div class="instr-chip active" id="instr-bisturi">🔪 Bisturí</div>
+      <div class="instr-chip" id="instr-pinza">✂️ Pinzas</div>
+      <div class="instr-chip" id="instr-sutura">🧵 Sutura</div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+  </div>
+
+  <!-- HUD Bottom -->
+  <div id="hud-bottom">
+    <div id="step-panel">
+      <div class="step-progress" id="step-progress"></div>
+      <div id="step-title">Detectando marcador...</div>
+      <div id="step-instruction">Apunta la cámara hacia el marcador Hiro impreso o usa el modo simulación.</div>
+    </div>
+    <div id="action-row">
+      <div class="action-btn" onclick="prevStep()">
+        <span class="icon">◀</span>Anterior
+      </div>
+      <div class="action-btn primary" onclick="nextStep()">
+        <span class="icon">✓</span>Confirmar
+      </div>
+      <div class="action-btn" onclick="showProcedure()">
+        <span class="icon">🎯</span>Procedimiento
+      </div>
+      <div class="action-btn" onclick="toggleSim()">
+        <span class="icon">📱</span>Simular AR
+      </div>
+    </div>
+    <div id="layer-bar">
+      <div class="layer-chip active" onclick="setLayer('piel',this)">🟤 Piel</div>
+      <div class="layer-chip" onclick="setLayer('musculo',this)">🔴 Músculo</div>
+      <div class="layer-chip" onclick="setLayer('hueso',this)">⬜ Hueso</div>
+      <div class="layer-chip" onclick="setLayer('organo',this)">💜 Órganos</div>
+      <div class="layer-chip" onclick="setLayer('nervio',this)">🟡 Nervios</div>
+    </div>
+  </div>
+
+  <!-- Procedure panel -->
+  <div id="procedure-panel">
+    <h2 id="proc-title">Selecciona la zona</h2>
+    <p id="proc-desc">Identifica la zona correcta para el procedimiento actual.</p>
+    <div class="proc-zones" id="proc-zones"></div>
+    <button class="btn-primary" onclick="closeProcedure()">Cancelar</button>
+  </div>
+
+  <!-- Metrics panel -->
+  <div id="metrics-panel">
+    <h2>📊 Resultados</h2>
+    <div class="subtitle">Sesión completada</div>
+    <div class="score-ring" id="score-ring">
+      <div class="score-inner">
+        <div class="score-number" id="final-score">0</div>
+        <div class="score-label">puntos</div>
+      </div>
+    </div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="m-label">Tiempo total</div>
+        <div class="m-value" id="m-total-time">0<span class="m-unit">s</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Errores</div>
+        <div class="m-value" id="m-errors" style="color:#F09595">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Precisión</div>
+        <div class="m-value" id="m-accuracy" style="color:#9FE1CB">0<span class="m-unit">%</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="m-label">Pasos OK</div>
+        <div class="m-value" id="m-steps-ok" style="color:#CECBF6">0</div>
+      </div>
+    </div>
+    <div class="step-times">
+      <h3>Tiempo por paso</h3>
+      <div id="step-times-list"></div>
+    </div>
+    <button class="btn-primary" onclick="showSurvey()" style="margin-bottom:12px">Responder cuestionario →</button>
+    <button class="btn-primary" style="background:rgba(255,255,255,0.06);border:1px solid var(--border)" onclick="restartApp()">Reiniciar módulo</button>
+  </div>
+
+  <!-- Survey panel -->
+  <div id="survey-panel">
+    <h2>📝 Cuestionario</h2>
+    <div class="sub">Tu opinión mejora el entrenamiento</div>
+    <div class="survey-q">
+      <label>1. ¿Qué tan fácil fue usar la aplicación?</label>
+      <div class="stars" id="stars-usability">
+        <span class="star" onclick="rateStar('usability',1)">⭐</span>
+        <span class="star" onclick="rateStar('usability',2)">⭐</span>
+        <span class="star" onclick="rateStar('usability',3)">⭐</span>
+        <span class="star" onclick="rateStar('usability',4)">⭐</span>
+        <span class="star" onclick="rateStar('usability',5)">⭐</span>
+      </div>
+    </div>
+    <div class="survey-q">
+      <label>2. ¿El contenido anatómico fue preciso?</label>
+      <div class="stars" id="stars-accuracy">
+        <span class="star" onclick="rateStar('accuracy',1)">⭐</span>
+        <span class="star" onclick="rateStar('accuracy',2)">⭐</span>
+        <span class="star" onclick="rateStar('accuracy',3)">⭐</span>
+        <span class="star" onclick="rateStar('accuracy',4)">⭐</span>
+        <span class="star" onclick="rateStar('accuracy',5)">⭐</span>
+      </div>
+    </div>
+    <div class="survey-q">
+      <label>3. ¿Qué fue lo más difícil?</label>
+      <div class="survey-options" id="difficulty-opts">
+        <div class="survey-opt" onclick="selectOpt(this,'diff')">Identificar las capas anatómicas</div>
+        <div class="survey-opt" onclick="selectOpt(this,'diff')">Realizar la interacción táctil</div>
+        <div class="survey-opt" onclick="selectOpt(this,'diff')">Seguir las instrucciones de pasos</div>
+        <div class="survey-opt" onclick="selectOpt(this,'diff')">Ninguno, fue fluido</div>
+      </div>
+    </div>
+    <div class="survey-q">
+      <label>4. ¿Recomendarías este simulador?</label>
+      <div class="survey-options" id="recommend-opts">
+        <div class="survey-opt" onclick="selectOpt(this,'rec')">Sí, definitivamente</div>
+        <div class="survey-opt" onclick="selectOpt(this,'rec')">Sí, con mejoras</div>
+        <div class="survey-opt" onclick="selectOpt(this,'rec')">No estoy seguro/a</div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="submitSurvey()">Enviar respuestas ✓</button>
+  </div>
+</div>
+
+<script>
+// ===== DATA =====
+const MODULES = {
+  arm: {
+    name: 'Brazo Humano',
+    icon: '💪',
+    steps: [
+      { title: 'Exploración externa', instruction: 'Observa la superficie cutánea del brazo. Identifica la fosa antecubital y el epicóndilo lateral.', layer: 'piel', highlight: {x:'45%',y:'50%'}, instrument: 'bisturi' },
+      { title: 'Capa muscular', instruction: 'Activa la capa muscular. Localiza el bíceps braquial y el braquiorradial. Rota el modelo con el dedo.', layer: 'musculo', highlight: {x:'50%',y:'42%'}, instrument: 'pinza' },
+      { title: 'Estructura ósea', instruction: 'Observa el húmero, cúbito y radio. Identifica las articulaciones del codo. Pellizca para hacer zoom.', layer: 'hueso', highlight: {x:'50%',y:'60%'}, instrument: 'pinza' },
+      { title: 'Incisión simulada', instruction: 'Selecciona el bisturí. Traza la incisión en la fosa antecubital para acceso venoso.', layer: 'piel', highlight: {x:'50%',y:'55%'}, instrument: 'bisturi' },
+      { title: 'Colocación de catéter', instruction: 'Posiciona el catéter IV en la vena cefálica. Confirma la posición y asegura con sutura.', layer: 'piel', highlight: {x:'48%',y:'48%'}, instrument: 'sutura' }
+    ],
+    procedure: {
+      title: 'Acceso venoso antecubital',
+      desc: 'Selecciona la zona anatómica correcta para la venopunción',
+      zones: [
+        { name: 'Vena cefálica', hint: 'Cara lateral', correct: true, icon: '🎯' },
+        { name: 'Nervio radial', hint: 'Cara lateral profunda', correct: false, icon: '⚡' },
+        { name: 'Arteria braquial', hint: 'Cara medial', correct: false, icon: '🔴' },
+        { name: 'Tendón bíceps', hint: 'Central', correct: false, icon: '🟠' }
+      ]
+    }
+  },
+  heart: {
+    name: 'Corazón',
+    icon: '🫀',
+    steps: [
+      { title: 'Pericardio', instruction: 'Examina el pericardio fibroso y seroso. Identifica las capas parietal y visceral.', layer: 'piel', highlight: {x:'50%',y:'45%'}, instrument: 'bisturi' },
+      { title: 'Miocardio', instruction: 'Activa capa muscular. Observa la diferencia de grosor entre ventrículo izquierdo y derecho.', layer: 'musculo', highlight: {x:'45%',y:'50%'}, instrument: 'pinza' },
+      { title: 'Cavidades cardíacas', instruction: 'Explora aurículas y ventrículos. Identifica válvulas mitral, tricúspide, aórtica y pulmonar.', layer: 'organo', highlight: {x:'50%',y:'52%'}, instrument: 'pinza' },
+      { title: 'Sistema coronario', instruction: 'Localiza las arterias coronarias derecha e izquierda. Identifica la DA y la circunfleja.', layer: 'nervio', highlight: {x:'52%',y:'42%'}, instrument: 'bisturi' },
+      { title: 'Sistema eléctrico', instruction: 'Visualiza el nodo SA, nodo AV y el haz de His. Traza la vía de conducción eléctrica.', layer: 'hueso', highlight: {x:'48%',y:'40%'}, instrument: 'sutura' }
+    ],
+    procedure: {
+      title: 'Punción pericárdica',
+      desc: 'Selecciona el punto de acceso correcto para la pericardiocentesis',
+      zones: [
+        { name: 'Espacio de Larrey', hint: 'Ángulo xifocostal izq.', correct: true, icon: '🎯' },
+        { name: 'Hueso esternal', hint: 'Zona central', correct: false, icon: '⬜' },
+        { name: 'Costilla 5ª', hint: 'Zona lateral', correct: false, icon: '🦴' },
+        { name: 'Vena yugular', hint: 'Cuello', correct: false, icon: '💙' }
+      ]
+    }
+  },
+  lung: {
+    name: 'Pulmones',
+    icon: '🫁',
+    steps: [
+      { title: 'Pleura', instruction: 'Examina la pleura visceral y parietal. Observa el espacio pleural y el receso costodiafragmático.', layer: 'piel', highlight: {x:'50%',y:'45%'}, instrument: 'bisturi' },
+      { title: 'Lóbulos pulmonares', instruction: 'Identifica los 3 lóbulos del pulmón derecho y 2 del izquierdo. Localiza las cisuras.', layer: 'musculo', highlight: {x:'52%',y:'50%'}, instrument: 'pinza' },
+      { title: 'Árbol bronquial', instruction: 'Traza el árbol bronquial desde la tráquea hasta los bronquios segmentarios.', layer: 'organo', highlight: {x:'50%',y:'38%'}, instrument: 'pinza' },
+      { title: 'Alvéolos', instruction: 'Activa la capa profunda. Observa los sacos alveolares y capilares pulmonares.', layer: 'hueso', highlight: {x:'48%',y:'55%'}, instrument: 'pinza' },
+      { title: 'Drenaje torácico', instruction: 'Simula la colocación de tubo de tórax en 5º espacio intercostal, línea axilar media.', layer: 'piel', highlight: {x:'55%',y:'58%'}, instrument: 'sutura' }
+    ],
+    procedure: {
+      title: 'Toracocentesis',
+      desc: 'Selecciona el espacio intercostal correcto para el drenaje',
+      zones: [
+        { name: '5° EIC línea axilar', hint: 'Zona segura', correct: true, icon: '🎯' },
+        { name: '2° EIC pectoral', hint: 'Neumotórax a tensión', correct: false, icon: '🟡' },
+        { name: 'Debajo de la costilla', hint: 'Riesgo neurovascular', correct: false, icon: '⚠️' },
+        { name: 'Línea paraesternal', hint: 'Mamaria interna', correct: false, icon: '❌' }
+      ]
+    }
+  },
+  catheter: {
+    name: 'Catéter IV',
+    icon: '🩺',
+    steps: [
+      { title: 'Preparación del sitio', instruction: 'Aplica antiséptico en la zona venosa del antebrazo. Espera 30 segundos para secado completo.', layer: 'piel', highlight: {x:'50%',y:'50%'}, instrument: 'bisturi' },
+      { title: 'Torniquete', instruction: 'Coloca el torniquete 10 cm proximal al sitio de punción. Palpa la vena cefálica o basílica.', layer: 'piel', highlight: {x:'45%',y:'42%'}, instrument: 'pinza' },
+      { title: 'Punción venosa', instruction: 'Inserta el catéter a 15-30°. Confirma reflujo de sangre en la cámara flash.', layer: 'piel', highlight: {x:'50%',y:'52%'}, instrument: 'bisturi' },
+      { title: 'Avance del catéter', instruction: 'Avanza la cánula plástica mientras retiras la aguja. Retira el torniquete.', layer: 'musculo', highlight: {x:'50%',y:'50%'}, instrument: 'pinza' },
+      { title: 'Aseguramiento', instruction: 'Conecta el sistema de infusión. Fija con apósito transparente. Registra fecha y hora.', layer: 'piel', highlight: {x:'50%',y:'50%'}, instrument: 'sutura' }
+    ],
+    procedure: {
+      title: 'Selección del calibre',
+      desc: 'Elige el catéter adecuado para transfusión de emergencia',
+      zones: [
+        { name: 'Calibre 14G', hint: 'Transfusión rápida', correct: true, icon: '🎯' },
+        { name: 'Calibre 24G', hint: 'Neonatos', correct: false, icon: '👶' },
+        { name: 'Calibre 22G', hint: 'Medicamentos', correct: false, icon: '💊' },
+        { name: 'Aguja IM', hint: 'Intramuscular', correct: false, icon: '❌' }
+      ]
+    }
+  }
+};
+
+// ===== STATE =====
+let state = {
+  module: 'arm',
+  currentStep: 0,
+  layer: 'piel',
+  errors: 0,
+  totalSteps: 0,
+  stepTimes: [],
+  stepStart: 0,
+  sessionStart: 0,
+  arActive: false,
+  simMode: false,
+  timerInterval: null,
+  surveyData: { usability: 0, accuracy: 0 },
+  animFrame: null
+};
+
+// ===== CANVAS AR RENDERER =====
+const canvas = document.getElementById('model-canvas');
+const ctx = canvas.getContext('2d');
+let rotX = 0.3, rotY = 0, lastTouch = null, pinchDist = null;
+let scale = 1, animT = 0;
+
+const LAYERS = {
+  piel:    { color: '#D4A574', stroke: '#A0724A', name: 'Piel', parts: drawArm_skin },
+  musculo: { color: '#C45C5C', stroke: '#8B2020', name: 'Músculo', parts: drawArm_muscle },
+  hueso:   { color: '#E8E0CC', stroke: '#B8A878', name: 'Hueso', parts: drawArm_bone },
+  organo:  { color: '#7B5EA7', stroke: '#4A3070', name: 'Órganos', parts: drawArm_organ },
+  nervio:  { color: '#F0C040', stroke: '#C09000', name: 'Nervios', parts: drawArm_nerve }
+};
+
+function drawArm_skin(ctx, t) {
+  ctx.fillStyle = '#D4A574';
+  ctx.strokeStyle = '#A0724A';
+  ctx.lineWidth = 2;
+  // Main arm shape
+  ctx.beginPath();
+  ctx.ellipse(160, 160, 55 * scale, 120 * scale, rotY * 0.3, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Skin texture lines
+  ctx.strokeStyle = 'rgba(120,80,40,0.3)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath();
+    ctx.moveTo(120 + i * 10, 70); ctx.lineTo(125 + i * 10, 250);
+    ctx.stroke();
+  }
+  // Vein hint
+  ctx.strokeStyle = 'rgba(60,100,180,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(145, 80); ctx.bezierCurveTo(140, 130, 155, 170, 148, 240);
+  ctx.stroke();
+}
+
+function drawArm_muscle(ctx, t) {
+  // Biceps
+  ctx.fillStyle = '#C45C5C';
+  ctx.strokeStyle = '#8B2020';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(155, 140, 38 * scale, 70 * scale, rotY * 0.2, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Triceps
+  ctx.fillStyle = '#A03030';
+  ctx.beginPath();
+  ctx.ellipse(175, 150, 28 * scale, 65 * scale, rotY * 0.15, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Brachioradialis
+  ctx.fillStyle = '#B84040';
+  ctx.beginPath();
+  ctx.ellipse(150, 220, 20 * scale, 45 * scale, 0.1, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Muscle fiber lines
+  ctx.strokeStyle = 'rgba(180,60,60,0.5)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.moveTo(130 + i * 8, 95); ctx.lineTo(132 + i * 8, 200);
+    ctx.stroke();
+  }
+}
+
+function drawArm_bone(ctx, t) {
+  // Humerus
+  ctx.fillStyle = '#E8E0CC';
+  ctx.strokeStyle = '#B8A878';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(160, 120, 20 * scale, 80 * scale, rotY * 0.1, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Radius
+  ctx.beginPath();
+  ctx.ellipse(148, 220, 12 * scale, 55 * scale, -0.1, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Ulna
+  ctx.beginPath();
+  ctx.ellipse(172, 222, 10 * scale, 55 * scale, 0.1, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Joint
+  ctx.fillStyle = '#D0C8A8';
+  ctx.beginPath();
+  ctx.ellipse(160, 170, 28 * scale, 22 * scale, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Bone texture
+  ctx.strokeStyle = 'rgba(150,130,80,0.4)';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(148 + i * 5, 70); ctx.lineTo(146 + i * 5, 160);
+    ctx.stroke();
+  }
+}
+
+function drawArm_organ(ctx, t) {
+  // Veins
+  ctx.strokeStyle = '#4466AA';
+  ctx.lineWidth = 3 * scale;
+  ctx.beginPath();
+  ctx.moveTo(145, 70); ctx.bezierCurveTo(140, 130, 155, 170, 148, 260);
+  ctx.stroke();
+  // Artery
+  ctx.strokeStyle = '#CC2222';
+  ctx.lineWidth = 4 * scale;
+  ctx.beginPath();
+  ctx.moveTo(170, 70); ctx.bezierCurveTo(168, 130, 165, 180, 162, 260);
+  ctx.stroke();
+  // Lymph nodes
+  ctx.fillStyle = '#88BB66';
+  [130, 160, 185].forEach(y => {
+    ctx.beginPath();
+    ctx.arc(152, y, 5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // Labels
+  ctx.fillStyle = '#AACCFF';
+  ctx.font = `${10 * scale}px monospace`;
+  ctx.fillText('Vena cefálica', 118, 100);
+  ctx.fillStyle = '#FF8888';
+  ctx.fillText('A. braquial', 130, 130);
+}
+
+function drawArm_nerve(ctx, t) {
+  // Radial nerve
+  ctx.strokeStyle = '#F0C040';
+  ctx.lineWidth = 2 * scale;
+  ctx.setLineDash([5, 3]);
+  ctx.beginPath();
+  ctx.moveTo(175, 70); ctx.bezierCurveTo(182, 120, 178, 165, 172, 260);
+  ctx.stroke();
+  // Median nerve
+  ctx.strokeStyle = '#FFE080';
+  ctx.beginPath();
+  ctx.moveTo(162, 70); ctx.bezierCurveTo(158, 130, 162, 175, 158, 260);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#F0C040';
+  ctx.font = `${9 * scale}px monospace`;
+  ctx.fillText('N. radial', 180, 120);
+  ctx.fillText('N. mediano', 130, 155);
+}
+
+function renderModel() {
+  animT += 0.02;
+  ctx.clearRect(0, 0, 320, 320);
+
+  // Background glow
+  if (state.arActive || state.simMode) {
+    const grad = ctx.createRadialGradient(160, 160, 20, 160, 160, 150);
+    grad.addColorStop(0, 'rgba(29,158,117,0.15)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 320, 320);
+  }
+
+  if (!state.arActive && !state.simMode) {
+    state.animFrame = requestAnimationFrame(renderModel);
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(160, 160);
+  ctx.rotate(rotY);
+  ctx.scale(scale, scale);
+  ctx.translate(-160, -160);
+
+  // Draw based on module
+  const mod = state.module;
+  const layerInfo = LAYERS[state.layer];
+  if (layerInfo) layerInfo.parts(ctx, animT);
+
+  // Module-specific overlays
+  if (mod === 'heart') drawHeartOverlay(ctx, animT);
+  if (mod === 'lung') drawLungOverlay(ctx, animT);
+  if (mod === 'catheter') drawCatheterOverlay(ctx, animT);
+
+  ctx.restore();
+
+  // Step highlight
+  const step = MODULES[state.module].steps[state.currentStep];
+  if (step && step.highlight) {
+    const hx = parseFloat(step.highlight.x) / 100 * 320;
+    const hy = parseFloat(step.highlight.y) / 100 * 320;
+    const pulse = Math.sin(animT * 3) * 0.5 + 0.5;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 12 + pulse * 6, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(250,199,117,${0.7 + pulse * 0.3})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(hx, hy, 20 + pulse * 8, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(250,199,117,${0.4 - pulse * 0.2})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Arrow
+    ctx.fillStyle = 'rgba(250,199,117,0.9)';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('←', hx + 22, hy + 4);
+  }
+
+  // Rotation handles hint
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = '10px sans-serif';
+  ctx.fillText('↻ rotar', 10, 15);
+
+  state.animFrame = requestAnimationFrame(renderModel);
+}
+
+function drawHeartOverlay(ctx, t) {
+  ctx.fillStyle = '#E05050';
+  ctx.strokeStyle = '#A01010';
+  ctx.lineWidth = 2;
+  // Heart shape
+  ctx.beginPath();
+  const s = 1 + Math.sin(t * 3) * 0.05; // heartbeat
+  ctx.save();
+  ctx.translate(160, 155); ctx.scale(s, s);
+  ctx.moveTo(0, -40 * scale);
+  ctx.bezierCurveTo(40 * scale, -80 * scale, 90 * scale, -20 * scale, 0, 50 * scale);
+  ctx.bezierCurveTo(-90 * scale, -20 * scale, -40 * scale, -80 * scale, 0, -40 * scale);
+  ctx.restore();
+  ctx.fill(); ctx.stroke();
+
+  if (state.layer === 'organo' || state.layer === 'musculo') {
+    ctx.strokeStyle = '#CC3333';
+    ctx.lineWidth = 3;
+    // Aorta
+    ctx.beginPath();
+    ctx.moveTo(170, 100); ctx.bezierCurveTo(190, 60, 180, 40, 160, 30);
+    ctx.stroke();
+    // Pulmonary artery
+    ctx.strokeStyle = '#5577CC';
+    ctx.beginPath();
+    ctx.moveTo(155, 105); ctx.bezierCurveTo(130, 70, 110, 60, 95, 70);
+    ctx.stroke();
+  }
+}
+
+function drawLungOverlay(ctx, t) {
+  const breathe = Math.sin(t * 1.5) * 0.06;
+  ctx.fillStyle = '#CC8899';
+  ctx.strokeStyle = '#884455';
+  ctx.lineWidth = 2;
+  // Right lung
+  ctx.beginPath();
+  ctx.save();
+  ctx.translate(200, 160); ctx.scale(1 + breathe, 1 + breathe);
+  ctx.ellipse(0, 0, 45 * scale, 90 * scale, 0.15, 0, Math.PI * 2);
+  ctx.restore(); ctx.fill(); ctx.stroke();
+  // Left lung
+  ctx.beginPath();
+  ctx.save();
+  ctx.translate(120, 162); ctx.scale(1 + breathe, 1 + breathe);
+  ctx.ellipse(0, 0, 40 * scale, 85 * scale, -0.15, 0, Math.PI * 2);
+  ctx.restore(); ctx.fill(); ctx.stroke();
+  // Trachea
+  ctx.strokeStyle = '#AA6677';
+  ctx.lineWidth = 8 * scale;
+  ctx.beginPath();
+  ctx.moveTo(160, 30); ctx.lineTo(160, 90);
+  ctx.moveTo(160, 90); ctx.lineTo(200, 120);
+  ctx.moveTo(160, 90); ctx.lineTo(120, 122);
+  ctx.stroke();
+}
+
+function drawCatheterOverlay(ctx, t) {
+  drawArm_skin(ctx, t);
+  if (state.currentStep >= 2) {
+    // Catheter
+    ctx.strokeStyle = '#88DDFF';
+    ctx.lineWidth = 3 * scale;
+    ctx.beginPath();
+    ctx.moveTo(145, 200); ctx.lineTo(145, 90);
+    ctx.stroke();
+    // Flash chamber
+    ctx.fillStyle = state.currentStep >= 3 ? 'rgba(200,50,50,0.8)' : 'rgba(200,200,200,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(145, 200, 8 * scale, 12 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Drip chamber
+    if (state.currentStep >= 4) {
+      ctx.strokeStyle = '#AAFFCC';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(145, 88); ctx.lineTo(145, 40); ctx.lineTo(170, 40);
+      ctx.stroke();
+      ctx.fillStyle = '#AAFFCC';
+      ctx.font = '10px monospace'; ctx.fillText('IV', 172, 44);
+    }
+  }
+}
+
+// ===== TOUCH =====
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2) {
+    pinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && lastTouch) {
+    const dx = e.touches[0].clientX - lastTouch.x;
+    rotY += dx * 0.012;
+    lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2 && pinchDist) {
+    const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    scale = Math.min(2.5, Math.max(0.5, scale * (newDist / pinchDist)));
+    pinchDist = newDist;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => { lastTouch = null; pinchDist = null; });
+
+// Mouse fallback
+let mouseDown = false, lastMouse = null;
+canvas.addEventListener('mousedown', e => { mouseDown = true; lastMouse = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('mousemove', e => {
+  if (!mouseDown || !lastMouse) return;
+  rotY += (e.clientX - lastMouse.x) * 0.01;
+  lastMouse = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('mouseup', () => { mouseDown = false; });
+canvas.addEventListener('wheel', e => {
+  scale = Math.min(2.5, Math.max(0.5, scale - e.deltaY * 0.001));
+  e.preventDefault();
+}, { passive: false });
+
+// ===== CAMERA =====
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    document.getElementById('camera-stream').srcObject = stream;
+    showToast('Cámara iniciada ✓');
+    setTimeout(() => simulateMarkerDetection(), 2000);
+  } catch (err) {
+    console.warn('Camera denied:', err);
+    showToast('Sin acceso a cámara — modo simulación', true);
+    state.simMode = true;
+    activateAR();
+  }
+}
+
+function simulateMarkerDetection() {
+  // Simulate marker detection after 2 seconds
+  document.getElementById('scan-line').classList.add('scanning');
+  setTimeout(() => {
+    document.getElementById('marker-guide').style.opacity = '0';
+    document.getElementById('scan-line').classList.remove('scanning');
+    state.arActive = true;
+    activateAR();
+    showToast('Marcador detectado ✓');
+  }, 1500);
+}
+
+function activateAR() {
+  state.arActive = true;
+  canvas.style.display = 'block';
+  updateStepUI();
+  startStepTimer();
+  renderModel();
+}
+
+// ===== TIMER =====
+function startStepTimer() {
+  state.stepStart = performance.now();
+}
+
+function stopStepTimer() {
+  const elapsed = (performance.now() - state.stepStart) / 1000;
+  state.stepTimes.push(Math.round(elapsed * 10) / 10);
+  return elapsed;
+}
+
+function updateMainTimer() {
+  if (!state.sessionStart) return;
+  const elapsed = Math.floor((Date.now() - state.sessionStart) / 1000);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  document.getElementById('timer-display').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+// ===== STEPS =====
+function updateStepUI() {
+  const mod = MODULES[state.module];
+  const step = mod.steps[state.currentStep];
+  const total = mod.steps.length;
+
+  document.getElementById('module-name').textContent = mod.name;
+  document.getElementById('step-counter').textContent = `Paso ${state.currentStep + 1} / ${total}`;
+  document.getElementById('step-title').textContent = step.title;
+  document.getElementById('step-instruction').textContent = step.instruction;
+
+  // Progress dots
+  const prog = document.getElementById('step-progress');
+  prog.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'step-dot' + (i < state.currentStep ? ' done' : i === state.currentStep ? ' active' : '');
+    prog.appendChild(dot);
+  }
+
+  // Layer
+  setLayer(step.layer, null, true);
+
+  // Instrument
+  document.querySelectorAll('.instr-chip').forEach(c => c.classList.remove('active'));
+  const instrMap = { bisturi: 'instr-bisturi', pinza: 'instr-pinza', sutura: 'instr-sutura' };
+  if (instrMap[step.instrument]) document.getElementById(instrMap[step.instrument])?.classList.add('active');
+}
+
+function nextStep() {
+  const mod = MODULES[state.module];
+  if (state.currentStep < mod.steps.length - 1) {
+    stopStepTimer();
+    state.currentStep++;
+    updateStepUI();
+    startStepTimer();
+    showToast(`Paso ${state.currentStep + 1} de ${mod.steps.length}`);
+  } else {
+    // Complete
+    stopStepTimer();
+    showMetrics();
+  }
+}
+
+function prevStep() {
+  if (state.currentStep > 0) {
+    state.currentStep--;
+    updateStepUI();
+    showToast('← Paso anterior');
+  }
+}
+
+function setLayer(layer, el, silent) {
+  state.layer = layer;
+  document.querySelectorAll('.layer-chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else {
+    // Find by layer name
+    document.querySelectorAll('.layer-chip').forEach(c => {
+      if (c.textContent.toLowerCase().includes(layer)) c.classList.add('active');
+    });
+  }
+  if (!silent) showToast(`Capa: ${LAYERS[layer]?.name || layer}`);
+}
+
+// ===== PROCEDURE =====
+function showProcedure() {
+  const proc = MODULES[state.module].procedure;
+  document.getElementById('proc-title').textContent = proc.title;
+  document.getElementById('proc-desc').textContent = proc.desc;
+
+  const zonesEl = document.getElementById('proc-zones');
+  zonesEl.innerHTML = '';
+  proc.zones.forEach(z => {
+    const div = document.createElement('div');
+    div.className = 'proc-zone';
+    div.innerHTML = `<span class="zone-icon">${z.icon}</span><span class="zone-name">${z.name}</span><span class="zone-hint">${z.hint}</span>`;
+    div.onclick = () => handleZoneSelect(div, z.correct, z.name);
+    zonesEl.appendChild(div);
+  });
+
+  document.getElementById('procedure-panel').style.display = 'flex';
+}
+
+function handleZoneSelect(el, correct, name) {
+  if (correct) {
+    el.classList.add('correct');
+    showToast('✓ Zona correcta!');
+    setTimeout(() => {
+      closeProcedure();
+      nextStep();
+    }, 1000);
+  } else {
+    el.classList.add('incorrect');
+    state.errors++;
+    showToast('✗ Zona incorrecta — intenta de nuevo', true);
+    setTimeout(() => el.classList.remove('incorrect'), 600);
+  }
+}
+
+function closeProcedure() {
+  document.getElementById('procedure-panel').style.display = 'none';
+}
+
+// ===== METRICS =====
+function showMetrics() {
+  const totalTime = Math.round((Date.now() - state.sessionStart) / 1000);
+  const stepsCompleted = state.stepTimes.length;
+  const accuracy = Math.max(0, Math.round((stepsCompleted / (stepsCompleted + state.errors)) * 100));
+  const score = Math.round(accuracy * 0.6 + Math.min(100, (300 / Math.max(1, totalTime)) * 40));
+
+  document.getElementById('m-total-time').innerHTML = `${totalTime}<span class="m-unit">s</span>`;
+  document.getElementById('m-errors').textContent = state.errors;
+  document.getElementById('m-accuracy').innerHTML = `${accuracy}<span class="m-unit">%</span>`;
+  document.getElementById('m-steps-ok').textContent = stepsCompleted;
+  document.getElementById('final-score').textContent = score;
+
+  // Score ring
+  const ring = document.getElementById('score-ring');
+  ring.style.background = `conic-gradient(var(--teal) ${score * 3.6}deg, rgba(255,255,255,0.08) 0deg)`;
+
+  // Step times
+  const list = document.getElementById('step-times-list');
+  const maxT = Math.max(...state.stepTimes, 1);
+  const mod = MODULES[state.module];
+  list.innerHTML = state.stepTimes.map((t, i) => `
+    <div class="step-time-row">
+      <div style="font-size:11px;color:var(--text-dim);min-width:80px;font-size:10px">${mod.steps[i]?.title.slice(0,14) || 'Paso ' + (i+1)}</div>
+      <div class="step-time-bar"><div class="step-time-fill" style="width:${(t/maxT*100).toFixed(0)}%"></div></div>
+      <div class="step-time-val">${t.toFixed(1)}s</div>
+    </div>
+  `).join('');
+
+  // Save to localStorage
+  const record = { module: state.module, score, accuracy, errors: state.errors, totalTime, date: new Date().toISOString() };
+  const history = JSON.parse(localStorage.getItem('medTrainerHistory') || '[]');
+  history.push(record);
+  localStorage.setItem('medTrainerHistory', JSON.stringify(history.slice(-50)));
+
+  document.getElementById('metrics-panel').style.display = 'flex';
+}
+
+// ===== SURVEY =====
+function showSurvey() {
+  document.getElementById('metrics-panel').style.display = 'none';
+  document.getElementById('survey-panel').style.display = 'flex';
+}
+
+function rateStar(category, val) {
+  state.surveyData[category] = val;
+  const stars = document.querySelectorAll(`#stars-${category} .star`);
+  stars.forEach((s, i) => s.classList.toggle('lit', i < val));
+}
+
+function selectOpt(el, group) {
+  document.querySelectorAll(`#${group === 'diff' ? 'difficulty' : 'recommend'}-opts .survey-opt`).forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function submitSurvey() {
+  const survey = {
+    usability: state.surveyData.usability,
+    accuracy: state.surveyData.accuracy,
+    difficulty: document.querySelector('#difficulty-opts .selected')?.textContent || 'No respondido',
+    recommend: document.querySelector('#recommend-opts .selected')?.textContent || 'No respondido',
+    date: new Date().toISOString()
+  };
+  const surveys = JSON.parse(localStorage.getItem('medTrainerSurveys') || '[]');
+  surveys.push(survey);
+  localStorage.setItem('medTrainerSurveys', JSON.stringify(surveys));
+  showToast('¡Gracias por tu respuesta! 🙏');
+  setTimeout(() => restartApp(), 1500);
+}
+
+// ===== UTILS =====
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = '', 2200);
+}
+
+function toggleSim() {
+  state.simMode = !state.simMode;
+  if (state.simMode && !state.arActive) activateAR();
+  showToast(state.simMode ? 'Modo simulación activado' : 'Modo simulación desactivado');
+}
+
+function goBack() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('splash').style.display = 'flex';
+  cancelAnimationFrame(state.animFrame);
+  clearInterval(state.timerInterval);
+  state = { ...state, currentStep: 0, errors: 0, stepTimes: [], arActive: false, simMode: false };
+}
+
+function restartApp() {
+  document.getElementById('metrics-panel').style.display = 'none';
+  document.getElementById('survey-panel').style.display = 'none';
+  state.currentStep = 0;
+  state.errors = 0;
+  state.stepTimes = [];
+  state.sessionStart = Date.now();
+  updateStepUI();
+  startStepTimer();
+}
+
+// ===== MODULE SELECTION =====
+let selectedModule = 'arm';
+function selectModule(el, mod) {
+  document.querySelectorAll('.module-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedModule = mod;
+}
+
+function startApp() {
+  state.module = selectedModule;
+  state.currentStep = 0;
+  state.errors = 0;
+  state.stepTimes = [];
+  state.sessionStart = Date.now();
+
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  state.timerInterval = setInterval(updateMainTimer, 1000);
+  startCamera();
+}
+
+// ===== AUTO-SIMULATE (for demo if no camera) =====
+setTimeout(() => {
+  if (!state.arActive && !state.simMode && document.getElementById('app').style.display === 'flex') {
+    state.simMode = true;
+    activateAR();
+  }
+}, 5000);
+</script>
+</body>
+</html>
