@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>MedAR — Anatomía en Realidad Aumentada</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#040c18;--surface:#091524;--surface2:#0f2035;
+  --accent:#00d4ff;--accent2:#00ff99;--red:#ff4466;--amber:#ffaa00;
+  --text:#ddeeff;--text2:#6a99bb;--border:rgba(0,212,255,0.18);--r:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:var(--text);font-family:'SF Pro Display',-apple-system,system-ui,sans-serif;overflow:hidden;height:100dvh;width:100vw;touch-action:none;}
+canvas{position:fixed;top:0;left:0;display:block;width:100%!important;height:100%!important;}
+
+/* ── START SCREEN ─────────────────────────────────── */
+#start-screen{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  z-index:200;padding:env(safe-area-inset-top,1.5rem) 1.5rem 1.5rem;
+  overflow-y:auto;transition:opacity .35s;
+}
+.logo-wrap{margin:1.5rem 0 .25rem;text-align:center;}
+.logo{font-size:2.8rem;font-weight:800;letter-spacing:-2px;
+  background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.logo-tag{font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--text2);margin-top:.1rem;}
+.section-label{font-size:.72rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin:1.5rem 0 .6rem;align-self:flex-start;width:100%;max-width:380px;}
+.model-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;width:100%;max-width:380px;}
+.model-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:.85rem .4rem .7rem;text-align:center;cursor:pointer;transition:all .2s;
+}
+.model-card.active{border-color:var(--accent);background:rgba(0,212,255,.08);}
+.model-card:active{transform:scale(.96);}
+.mc-icon{font-size:1.9rem;margin-bottom:.4rem;}
+.mc-name{font-size:.72rem;color:var(--text2);font-weight:500;}
+.mc-proc{font-size:.6rem;color:var(--text2);opacity:.6;margin-top:.1rem;}
+.model-card.active .mc-name{color:var(--accent);}
+.info-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:.9rem 1rem;width:100%;max-width:380px;
+}
+.info-card p{font-size:.78rem;color:var(--text2);line-height:1.65;}
+.info-card strong{color:var(--text);}
+.feature-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;}
+.feat-chip{font-size:.65rem;padding:.2rem .55rem;background:rgba(0,212,255,.08);
+  border:1px solid rgba(0,212,255,.25);border-radius:20px;color:var(--accent);}
+#start-btn{
+  width:100%;max-width:380px;padding:1rem;margin-top:1.2rem;
+  background:var(--accent);color:#000;border:none;border-radius:var(--r);
+  font-size:1rem;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.5px;
+}
+#start-btn:active{transform:scale(.98);}
+#start-btn:disabled{opacity:.45;cursor:not-allowed;}
+#demo-btn{
+  width:100%;max-width:380px;padding:.8rem;margin-top:.6rem;
+  background:transparent;color:var(--text2);border:1px solid var(--border);
+  border-radius:var(--r);font-size:.88rem;cursor:pointer;transition:all .15s;
+}
+#demo-btn:active{background:var(--surface2);}
+.compat-warn{
+  width:100%;max-width:380px;padding:.75rem 1rem;margin-top:.8rem;
+  background:rgba(255,68,102,.08);border:1px solid rgba(255,68,102,.3);
+  border-radius:10px;font-size:.75rem;color:#ff8899;line-height:1.5;display:none;
+}
+
+/* ── AR OVERLAY ───────────────────────────────────── */
+#overlay{position:fixed;inset:0;pointer-events:none;z-index:50;display:none;}
+#overlay.visible{display:block;}
+
+/* Top HUD */
+#hud-top{
+  position:absolute;top:0;left:0;right:0;
+  padding:env(safe-area-inset-top,.5rem) 1rem .7rem;
+  background:linear-gradient(180deg,rgba(4,12,24,.88) 0%,transparent 100%);
+  display:flex;align-items:center;justify-content:space-between;
+  pointer-events:auto;
+}
+.hud-model{font-size:.82rem;font-weight:700;color:var(--accent);letter-spacing:.5px;}
+.hud-proc{font-size:.65rem;color:var(--text2);margin-top:.05rem;}
+#hud-timer{
+  font-size:.78rem;font-family:monospace;font-weight:600;
+  background:rgba(0,0,0,.5);border:1px solid var(--border);
+  padding:.28rem .65rem;border-radius:6px;color:var(--accent);
+}
+#end-btn{
+  background:rgba(255,68,102,.15);border:1px solid rgba(255,68,102,.45);
+  color:var(--red);font-size:.68rem;font-weight:600;padding:.32rem .7rem;
+  border-radius:7px;cursor:pointer;pointer-events:auto;
+}
+
+/* Metrics chip */
+#metrics-chip{
+  position:absolute;top:calc(env(safe-area-inset-top,.5rem) + 52px);right:1rem;
+  background:rgba(4,12,24,.85);border:1px solid var(--border);border-radius:10px;
+  padding:.55rem .75rem;font-size:.65rem;min-width:90px;
+  backdrop-filter:blur(8px);pointer-events:none;
+}
+.mc-row{display:flex;justify-content:space-between;gap:.6rem;padding:.12rem 0;}
+.mc-lbl{color:var(--text2);}
+.mc-val{color:var(--accent);font-weight:700;font-family:monospace;}
+.mc-val.err{color:var(--red);}
+
+/* Scan hint */
+#scan-hint{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  text-align:center;pointer-events:none;
+}
+.scan-ring{
+  width:90px;height:90px;border-radius:50%;
+  border:2px solid var(--accent);margin:0 auto .9rem;
+  animation:ringPulse 1.6s ease-in-out infinite;
+}
+.scan-ring2{
+  width:70px;height:70px;border-radius:50%;
+  border:1px solid rgba(0,212,255,.4);
+  position:absolute;top:10px;left:10px;
+  animation:ringPulse 1.6s ease-in-out infinite .4s;
+}
+@keyframes ringPulse{0%,100%{opacity:.25;transform:scale(.88);}50%{opacity:1;transform:scale(1.08);}}
+.scan-text{font-size:.82rem;color:var(--text2);line-height:1.5;}
+.scan-arrow{font-size:1.4rem;margin-bottom:.3rem;animation:bounce .9s ease-in-out infinite;}
+@keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-5px);}}
+
+/* Layer Panel */
+#layer-panel{
+  position:absolute;left:.75rem;top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:.4rem;
+  pointer-events:auto;
+}
+.layer-btn{
+  width:42px;height:42px;border-radius:10px;
+  background:rgba(4,12,24,.85);border:1px solid var(--border);
+  color:var(--text2);font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .18s;
+}
+.layer-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.12);}
+.layer-badge{
+  font-size:.58rem;text-align:center;color:var(--text2);
+  background:rgba(4,12,24,.85);border:1px solid var(--border);
+  border-radius:6px;padding:.15rem .4rem;max-width:52px;word-wrap:break-word;text-align:center;
+}
+
+/* Step Panel */
+#step-panel{
+  position:absolute;bottom:145px;left:.75rem;right:.75rem;
+  background:rgba(4,12,24,.92);border:1px solid var(--border);
+  border-radius:var(--r);padding:.9rem 1rem;backdrop-filter:blur(12px);
+  pointer-events:none;
+}
+.sp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;}
+.sp-num{font-size:.62rem;color:var(--accent2);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;}
+.sp-dots{display:flex;gap:3px;}
+.sp-dot{height:3px;border-radius:2px;transition:all .3s;}
+.sp-dot.done{background:var(--accent2);}
+.sp-dot.cur{background:var(--accent);}
+.sp-dot.todo{background:rgba(255,255,255,.15);}
+.sp-title{font-size:.92rem;font-weight:600;color:var(--text);margin-bottom:.3rem;line-height:1.3;}
+.sp-desc{font-size:.74rem;color:var(--text2);line-height:1.55;}
+.sp-arrow{color:var(--accent);margin-right:.3rem;}
+
+/* Bottom Controls */
+#ctrl-bar{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:.65rem .75rem calc(env(safe-area-inset-bottom,.5rem) + .5rem);
+  background:linear-gradient(0deg,rgba(4,12,24,.95) 0%,transparent 100%);
+  display:flex;gap:.5rem;pointer-events:auto;
+}
+.cb{
+  flex:1;padding:.65rem .35rem;
+  background:rgba(9,21,36,.92);border:1px solid var(--border);
+  border-radius:10px;color:var(--text2);font-size:.7rem;
+  text-align:center;cursor:pointer;transition:all .18s;
+  display:flex;flex-direction:column;align-items:center;gap:.18rem;
+  -webkit-user-select:none;user-select:none;
+}
+.cb:active{transform:scale(.95);background:var(--surface2);}
+.cb.primary{background:rgba(0,212,255,.12);border-color:var(--accent);color:var(--accent);}
+.cb-icon{font-size:1rem;line-height:1;}
+.cb-lbl{font-size:.6rem;}
+
+/* Survey */
+#survey-modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;z-index:300;padding:1.5rem;
+}
+#survey-modal.open{display:flex;}
+.survey-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:1.4rem;width:100%;max-width:360px;
+  max-height:85dvh;overflow-y:auto;
+}
+.sv-title{font-size:1.05rem;font-weight:700;margin-bottom:.15rem;}
+.sv-sub{font-size:.75rem;color:var(--text2);margin-bottom:1.2rem;}
+.sv-q{margin-bottom:1.1rem;}
+.sv-q label{font-size:.8rem;color:var(--text2);display:block;margin-bottom:.45rem;}
+.sv-stars{display:flex;gap:.35rem;}
+.sv-star{
+  width:42px;height:38px;border-radius:8px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);font-size:.85rem;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.sv-star.on{background:rgba(0,212,255,.18);border-color:var(--accent);color:var(--accent);}
+.sv-submit{
+  width:100%;padding:.85rem;background:var(--accent);color:#000;
+  font-weight:700;border:none;border-radius:10px;cursor:pointer;
+  font-size:.95rem;margin-top:.4rem;
+}
+
+/* Results */
+#results-screen{
+  position:fixed;inset:0;background:var(--bg);z-index:400;
+  overflow-y:auto;padding:env(safe-area-inset-top,1.5rem) 1.4rem 2rem;display:none;
+}
+.rs-header{text-align:center;padding:1.5rem 0 1rem;}
+.rs-badge{
+  display:inline-block;font-size:.62rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--accent2);border:1px solid rgba(0,255,153,.3);
+  border-radius:20px;padding:.2rem .8rem;margin-bottom:.75rem;
+}
+.rs-title{font-size:1.5rem;font-weight:800;color:var(--accent);letter-spacing:-1px;}
+.rs-model{font-size:.8rem;color:var(--text2);margin-top:.2rem;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1.1rem;}
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:.9rem;text-align:center;
+}
+.stat-num{font-size:2rem;font-weight:800;color:var(--accent);line-height:1;}
+.stat-lbl{font-size:.68rem;color:var(--text2);margin-top:.3rem;}
+.breakdown{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1rem;margin-bottom:1rem;}
+.breakdown h3{font-size:.72rem;color:var(--accent);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:.8rem;}
+.bd-row{display:flex;align-items:center;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.05);}
+.bd-row:last-child{border-bottom:none;}
+.bd-n{font-size:.7rem;color:var(--accent2);margin-right:.5rem;min-width:16px;font-weight:700;}
+.bd-name{font-size:.75rem;color:var(--text2);flex:1;line-height:1.3;}
+.bd-time{font-size:.72rem;font-family:monospace;color:var(--text);margin-left:.4rem;}
+.bd-stat{font-size:.65rem;padding:.12rem .4rem;border-radius:4px;margin-left:.35rem;white-space:nowrap;}
+.ok{background:rgba(0,255,153,.1);color:var(--accent2);}
+.er{background:rgba(255,68,102,.1);color:var(--red);}
+.score-bar-wrap{margin:.5rem 0 1.1rem;}
+.score-bar-bg{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;}
+.score-bar-fill{height:100%;border-radius:4px;transition:width 1s ease;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));}
+.score-pct{font-size:.75rem;color:var(--text2);margin-top:.35rem;text-align:right;}
+#restart-btn2{
+  width:100%;padding:.95rem;background:var(--accent);color:#000;
+  font-weight:700;border:none;border-radius:var(--r);font-size:.95rem;cursor:pointer;margin-bottom:.6rem;
+}
+.export-btn{
+  width:100%;padding:.8rem;background:transparent;
+  border:1px solid var(--border);color:var(--text2);
+  border-radius:var(--r);font-size:.85rem;cursor:pointer;
+}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:160px;left:50%;transform:translateX(-50%);
+  background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);
+  color:var(--accent);font-size:.78rem;padding:.45rem 1.1rem;
+  border-radius:8px;z-index:1000;display:none;pointer-events:none;
+  white-space:nowrap;max-width:90vw;text-align:center;
+  backdrop-filter:blur(8px);
+}
+#toast.err{background:rgba(255,68,102,.15);border-color:rgba(255,68,102,.4);color:var(--red);}
+
+/* Demo mode banner */
+#demo-banner{
+  position:absolute;top:calc(env(safe-area-inset-top,.5rem) + 52px);left:50%;
+  transform:translateX(-50%);
+  background:rgba(255,170,0,.15);border:1px solid rgba(255,170,0,.4);
+  color:var(--amber);font-size:.65rem;padding:.25rem .7rem;border-radius:6px;
+  pointer-events:none;display:none;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ START SCREEN ══════════════════════════════════════════ -->
+<div id="start-screen">
+  <div class="logo-wrap">
+    <div class="logo">MedAR</div>
+    <div class="logo-tag">Anatomía · Realidad Aumentada</div>
+  </div>
+
+  <div class="section-label">Modelo anatómico</div>
+  <div class="model-grid" id="model-grid">
+    <div class="model-card active" data-model="heart">
+      <div class="mc-icon">🫀</div>
+      <div class="mc-name">Corazón</div>
+      <div class="mc-proc">Auscultación</div>
+    </div>
+    <div class="model-card" data-model="arm">
+      <div class="mc-icon">💪</div>
+      <div class="mc-name">Brazo</div>
+      <div class="mc-proc">Venopunción IV</div>
+    </div>
+    <div class="model-card" data-model="respiratory">
+      <div class="mc-icon">🫁</div>
+      <div class="mc-name">Pulmones</div>
+      <div class="mc-proc">Eval. pulmonar</div>
+    </div>
+  </div>
+
+  <div class="section-label">Instrucciones</div>
+  <div class="info-card">
+    <p><strong>AR real:</strong> Apunta a una superficie plana — el reticle indica dónde colocar el modelo. Toca para desplegarlo. <strong>Arrastra</strong> para rotar, <strong>pinza</strong> para escalar. Usa los botones de capa para explorar anatomía en profundidad.</p>
+    <div class="feature-row">
+      <span class="feat-chip">WebXR / ARCore / ARKit</span>
+      <span class="feat-chip">Hit-test planar</span>
+      <span class="feat-chip">4 capas anatómicas</span>
+      <span class="feat-chip">5 pasos guiados</span>
+      <span class="feat-chip">Métricas de uso</span>
+      <span class="feat-chip">Sonido espacial</span>
+    </div>
+  </div>
+
+  <button id="start-btn">Iniciar sesión AR →</button>
+  <button id="demo-btn">Modo demostración (sin AR)</button>
+  <div class="compat-warn" id="compat-warn"></div>
+</div>
+
+<!-- ══ AR OVERLAY (DOM Overlay) ═════════════════════════════ -->
+<div id="overlay">
+  <div id="demo-banner">MODO DEMO — sin cámara AR</div>
+
+  <!-- Scan hint -->
+  <div id="scan-hint">
+    <div class="scan-arrow">↓</div>
+    <div class="scan-ring"><div class="scan-ring2"></div></div>
+    <div class="scan-text">Mueve el dispositivo lentamente<br>para detectar una superficie plana</div>
+  </div>
+
+  <!-- Top HUD -->
+  <div id="hud-top">
+    <div>
+      <div class="hud-model" id="hud-model-name">Corazón</div>
+      <div class="hud-proc" id="hud-proc-name">Auscultación Cardíaca</div>
+    </div>
+    <div id="hud-timer">00:00</div>
+    <button id="end-btn" onclick="endSession()">■ Fin</button>
+  </div>
+
+  <!-- Mini Metrics -->
+  <div id="metrics-chip">
+    <div class="mc-row"><span class="mc-lbl">Pasos</span><span class="mc-val" id="m-steps">0/5</span></div>
+    <div class="mc-row"><span class="mc-lbl">Errores</span><span class="mc-val err" id="m-errors">0</span></div>
+    <div class="mc-row"><span class="mc-lbl">Clics</span><span class="mc-val" id="m-clicks">0</span></div>
+    <div class="mc-row"><span class="mc-lbl">Capas</span><span class="mc-val" id="m-layers">0</span></div>
+  </div>
+
+  <!-- Layer Panel -->
+  <div id="layer-panel">
+    <div class="layer-badge" id="layer-badge">Capa</div>
+    <button class="layer-btn active" id="lb0" onclick="setLayer(0)">🔵</button>
+    <button class="layer-btn" id="lb1" onclick="setLayer(1)">🔴</button>
+    <button class="layer-btn" id="lb2" onclick="setLayer(2)">⚪</button>
+    <button class="layer-btn" id="lb3" onclick="setLayer(3)">🟡</button>
+  </div>
+
+  <!-- Step Panel -->
+  <div id="step-panel">
+    <div class="sp-header">
+      <div class="sp-num" id="sp-num">Paso 1</div>
+      <div class="sp-dots" id="sp-dots"></div>
+    </div>
+    <div class="sp-title" id="sp-title">—</div>
+    <div class="sp-desc"><span class="sp-arrow">→</span><span id="sp-desc">—</span></div>
+  </div>
+
+  <!-- Control Bar -->
+  <div id="ctrl-bar">
+    <div class="cb" onclick="prevStep()"><div class="cb-icon">←</div><div class="cb-lbl">Anterior</div></div>
+    <div class="cb" onclick="toggleLayerCycle()"><div class="cb-icon">🔬</div><div class="cb-lbl">Capas</div></div>
+    <div class="cb primary" onclick="confirmStep()"><div class="cb-icon">✓</div><div class="cb-lbl">Confirmar</div></div>
+    <div class="cb" onclick="simError()"><div class="cb-icon">❌</div><div class="cb-lbl">Error</div></div>
+    <div class="cb" onclick="nextStep()"><div class="cb-icon">→</div><div class="cb-lbl">Siguiente</div></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- ══ SURVEY ════════════════════════════════════════════════ -->
+<div id="survey-modal">
+  <div class="survey-card">
+    <div class="sv-title">Evaluación de la Sesión</div>
+    <div class="sv-sub">Ayúdanos a mejorar MedAR con tu opinión (1–5)</div>
+    <div class="sv-q"><label>Facilidad de uso del sistema</label><div class="sv-stars" data-q="ease" id="sq-ease"></div></div>
+    <div class="sv-q"><label>Utilidad del contenido anatómico</label><div class="sv-stars" data-q="content" id="sq-content"></div></div>
+    <div class="sv-q"><label>Calidad de la experiencia AR / 3D</label><div class="sv-stars" data-q="ar" id="sq-ar"></div></div>
+    <div class="sv-q"><label>Claridad de los pasos guiados</label><div class="sv-stars" data-q="steps" id="sq-steps"></div></div>
+    <div class="sv-q"><label>Satisfacción general</label><div class="sv-stars" data-q="overall" id="sq-overall"></div></div>
+    <button class="sv-submit" onclick="submitSurvey()">Ver resultados →</button>
+  </div>
+</div>
+
+<!-- ══ RESULTS ═══════════════════════════════════════════════ -->
+<div id="results-screen">
+  <div class="rs-header">
+    <div class="rs-badge">Sesión completada</div>
+    <div class="rs-title">Resultados</div>
+    <div class="rs-model" id="rs-model-lbl">—</div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-num" id="rs-time">0:00</div><div class="stat-lbl">Tiempo total</div></div>
+    <div class="stat-card"><div class="stat-num" id="rs-steps">0/5</div><div class="stat-lbl">Pasos completados</div></div>
+    <div class="stat-card"><div class="stat-num" id="rs-errors">0</div><div class="stat-lbl">Errores cometidos</div></div>
+    <div class="stat-card"><div class="stat-num" id="rs-score">—%</div><div class="stat-lbl">Puntuación final</div></div>
+  </div>
+  <div class="breakdown">
+    <h3>Puntuación</h3>
+    <div class="score-bar-wrap">
+      <div class="score-bar-bg"><div class="score-bar-fill" id="score-fill" style="width:0%"></div></div>
+      <div class="score-pct" id="score-pct-text">0 / 100</div>
+    </div>
+  </div>
+  <div class="breakdown">
+    <h3>Desglose por paso</h3>
+    <div id="bd-steps-list"></div>
+  </div>
+  <div class="breakdown" id="survey-results-block">
+    <h3>Evaluación del usuario</h3>
+    <div id="bd-survey-list"></div>
+  </div>
+  <button id="restart-btn2" onclick="restartApp()">Nueva sesión</button>
+  <button class="export-btn" onclick="exportMetrics()">Exportar métricas JSON</button>
+</div>
+
+<!-- ══ SCRIPT ════════════════════════════════════════════════ -->
+<script>
+/* ── DATA ───────────────────────────────────────────────── */
+const MODELS = {
+  heart:{
+    name:'Corazón',proc:'Auscultación Cardíaca',
+    layers:['Pericardio','Miocardio','Cámaras cardíacas','Grandes vasos'],
+    steps:[
+      {title:'Identificar el ápex cardíaco',desc:'Toca la región inferolateral izquierda del corazón. El impulso apical se palpa en el 5° espacio intercostal, línea medioclavicular.'},
+      {title:'Posicionar en área mitral',desc:'Coloca el diafragma del estetoscopio sobre el foco mitral. Presiona firmemente sobre la piel.'},
+      {title:'Evaluar primer ruido (S1)',desc:'Escucha el "lub" — representa el cierre simultáneo de las válvulas mitral y tricúspide al inicio de la sístole ventricular.'},
+      {title:'Evaluar segundo ruido (S2)',desc:'Identifica el "dub" — cierre de válvulas aórtica y pulmonar al final de la sístole. Nota el desdoblamiento fisiológico en inspiración.'},
+      {title:'Documentar y registrar hallazgos',desc:'Registra: frecuencia, ritmo, intensidad de S1 y S2, y presencia de soplos (sistólico/diastólico), frotes o galope.'}
+    ],
+    zones:[[0,-0.03,0.06],[0.025,-0.005,0.065],[0,0,0.07],[-0.01,0.02,0.06],[0,0.01,0.05]]
+  },
+  arm:{
+    name:'Brazo',proc:'Venopunción — Catéter IV',
+    layers:['Piel','Tejido subcutáneo y venas','Compartimento muscular','Estructuras óseas'],
+    steps:[
+      {title:'Identificar vena de punción',desc:'Localiza la vena cefálica (azul, lateral) o basílica (medial). Aplica torniquete 10 cm proximal. Pide al paciente que cierre el puño.'},
+      {title:'Preparar la zona aséptica',desc:'Limpia con torunda de clorhexidina 2% en movimiento circular (del centro hacia afuera, 3–4 cm). Deja secar 30 segundos sin soplar.'},
+      {title:'Insertar el catéter IV',desc:'Sostén el catéter con bisel arriba a 15–30°. Avanza hasta visualizar retorno de sangre en la cámara. Baja el ángulo a 5°.'},
+      {title:'Verificar posición correcta',desc:'Con una mano estabiliza la aguja, con la otra avanza el catéter plástico. Retira la aguja, abre el torniquete. Verifica flujo sin resistencia.'},
+      {title:'Asegurar y documentar',desc:'Fija con apósito transparente estéril. Documenta: fecha, hora, calibre del catéter, número de intentos y extremidad utilizada.'}
+    ],
+    zones:[[0.08,0.05,0.02],[0.07,0.03,0.03],[0.06,0.01,0.04],[0.05,-0.01,0.04],[0.04,-0.03,0.03]]
+  },
+  respiratory:{
+    name:'Sistema Respiratorio',proc:'Evaluación Pulmonar Completa',
+    layers:['Pared torácica','Parénquima pulmonar','Árbol bronquial','Alvéolos y pleura'],
+    steps:[
+      {title:'Inspección — patrón respiratorio',desc:'Observa simetría del tórax, uso de músculos accesorios, tiraje, cianosis y frecuencia respiratoria por 60 segundos completos.'},
+      {title:'Palpación — expansión torácica',desc:'Apoya las palmas en ambos campos a la vez. Pide inspiración profunda. Verifica expansión simétrica; asimetría sugiere patología unilateral.'},
+      {title:'Percusión de campos pulmonares',desc:'Percute de arriba abajo, comparando ambos lados. Claro = normal · Mate = consolidación/derrame · Timpánico = neumotórax.'},
+      {title:'Auscultación — murmullo vesicular',desc:'Coloca el estetoscopio en 8 puntos simétricos. Escucha un ciclo completo por zona. Murmullo vesicular suave y uniforme es normal.'},
+      {title:'Identificar ruidos adventicios',desc:'Documenta: sibilancias (obstrucción), crepitaciones (líquido/fibrosis), roncus (secreciones), o frote pleural (pleuritis). Correlaciona con clínica.'}
+    ],
+    zones:[[0.05,0.04,0.03],[-0.05,0.03,0.03],[0.04,0.0,0.04],[-0.04,-0.01,0.04],[0,0.02,0.04]]
+  }
+};
+
+/* ── STATE ──────────────────────────────────────────────── */
+const S = {
+  model:'heart',xrSession:null,renderer:null,scene:null,camera:null,
+  reticle:null,modelGroup:null,placed:false,hitSrc:null,
+  layer:0,step:0,confirmed:[],demoMode:false,
+  timerInt:null,stepStart:null,audioCtx:null,
+  metrics:{start:null,end:null,total:0,stepTimes:[],stepErrors:[],
+    errors:0,clicks:0,layers:0,stepsOk:0,survey:{}}
+};
+
+/* ── AUDIO ──────────────────────────────────────────────── */
+function beep(type){
+  try{
+    if(!S.audioCtx) S.audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=S.audioCtx,o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    const cfg={success:{f:880,t:'sine',d:.35},error:{f:200,t:'sawtooth',d:.5},
+      step:{f:660,t:'triangle',d:.25},place:{f:440,t:'sine',d:.45},
+      layer:{f:520,t:'sine',d:.18}};
+    const c=cfg[type]||cfg.step;
+    o.frequency.value=c.f;o.type=c.t;
+    g.gain.setValueAtTime(.18,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+c.d);
+    o.start(ctx.currentTime);o.stop(ctx.currentTime+c.d);
+  }catch(e){}
+}
+
+/* ── THREE.JS INIT ──────────────────────────────────────── */
+function initThreeJS(){
+  S.scene=new THREE.Scene();
+  S.camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.005,20);
+
+  S.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  S.renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  S.renderer.setSize(window.innerWidth,window.innerHeight);
+  S.renderer.xr.enabled=true;
+  S.renderer.outputEncoding=THREE.sRGBEncoding;
+  document.body.insertBefore(S.renderer.domElement,document.body.firstChild);
+
+  const amb=new THREE.AmbientLight(0xffffff,.65);S.scene.add(amb);
+  const dir=new THREE.DirectionalLight(0xffffff,.9);
+  dir.position.set(1,2,1.5);S.scene.add(dir);
+  const rim=new THREE.PointLight(0x00d4ff,.5,3);
+  rim.position.set(-1.2,.8,0);S.scene.add(rim);
+
+  // Reticle
+  const rg=new THREE.RingGeometry(.035,.05,32);
+  rg.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  S.reticle=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:0x00d4ff,opacity:.9,transparent:true}));
+  S.reticle.matrixAutoUpdate=false;S.reticle.visible=false;S.scene.add(S.reticle);
+  const rg2=new THREE.RingGeometry(.06,.065,32);
+  rg2.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  const rm2=new THREE.Mesh(rg2,new THREE.MeshBasicMaterial({color:0x00d4ff,opacity:.3,transparent:true}));
+  S.reticle.add(rm2);
+}
+
+/* ── ANATOMICAL MODEL BUILDERS ──────────────────────────── */
+function buildHeart(){
+  const g=new THREE.Group();g.scale.setScalar(.12);
+  const L=[[],[],[],[]];
+  // L0: Pericardio
+  const pc=new THREE.Mesh(new THREE.SphereGeometry(.6,22,18),
+    new THREE.MeshPhongMaterial({color:0xffcccc,transparent:true,opacity:.28,side:THREE.DoubleSide,depthWrite:false}));
+  pc.scale.set(1,.95,.85);add(g,pc,L,0);
+  // L1: Miocardio
+  const myo=new THREE.Mesh(new THREE.SphereGeometry(.5,20,16),
+    new THREE.MeshPhongMaterial({color:0xcc2020,shininess:40}));
+  myo.scale.set(1,1.08,.88);add(g,myo,L,1);
+  const groove=new THREE.Mesh(new THREE.CylinderGeometry(.025,.018,.55,8),
+    new THREE.MeshPhongMaterial({color:0x991010}));
+  groove.position.set(0,-.1,.32);groove.rotation.z=.15;add(g,groove,L,1);
+  // L2: Cámaras
+  const cham=[
+    [-.24,.14,.1,.2,.22,'#4466cc',1],  // RA
+    [.2,.12,-.1,.18,.2,'#dd2222',1],   // LA
+    [-.2,-.16,.08,.2,.25,'#3355bb',1], // RV
+    [.16,-.19,0,.18,.26,'#cc1515',1]   // LV
+  ];
+  cham.forEach(([x,y,z,r,s,c])=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(r,14,12),
+      new THREE.MeshPhongMaterial({color:c}));
+    m.position.set(x,y,z);m.scale.setScalar(s/r);add(g,m,L,2);
+  });
+  // L3: Vasos
+  [[.14,.5,-.05,.08,.1,.44,-.28,'#ee8888'],
+   [-.12,.46,.06,.065,.08,.38,.22,'#8899ff'],
+   [-.28,.4,0,.055,.065,.36,0,'#5566cc']]
+    .forEach(([x,y,z,r1,r2,h,rz,c],i)=>{
+      const v=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,10),
+        new THREE.MeshPhongMaterial({color:c}));
+      v.position.set(x,y,z);v.rotation.z=rz;add(g,v,L,3);
+    });
+  g.userData={layers:L,type:'heart'};return g;
+}
+
+function buildArm(){
+  const g=new THREE.Group();g.scale.setScalar(.11);
+  g.rotation.z=Math.PI/7;
+  const L=[[],[],[],[]];
+  // L0: Piel
+  const sk=new THREE.Mesh(new THREE.CylinderGeometry(.3,.27,2.6,16),
+    new THREE.MeshPhongMaterial({color:0xf4a574,transparent:true,opacity:.55}));
+  add(g,sk,L,0);
+  const wr=new THREE.Mesh(new THREE.CylinderGeometry(.2,.3,.4,12),
+    new THREE.MeshPhongMaterial({color:0xf4a574,transparent:true,opacity:.55}));
+  wr.position.y=1.5;add(g,wr,L,0);
+  // L1: Subcutáneo + venas
+  const sub=new THREE.Mesh(new THREE.CylinderGeometry(.25,.22,2.4,16),
+    new THREE.MeshPhongMaterial({color:0xffe4cc,transparent:true,opacity:.7}));
+  add(g,sub,L,1);
+  [[.23,0,.04,.024,.024,2.2,8,'#5566ee',.06],
+   [-.2,0,.04,.019,.019,2.0,8,'#4455dd',-.04]]
+    .forEach(([x,y,z,r1,r2,h,seg,c,rz])=>{
+      const v=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,seg),
+        new THREE.MeshPhongMaterial({color:c}));
+      v.position.set(x,y,z);v.rotation.z=rz;add(g,v,L,1);
+    });
+  // L2: Músculos
+  [[.03,.42,0,.22,.18,1.2,.1,'#cc2222'],
+   [-.04,.38,-.06,.17,.14,1.1,-.08,'#aa1818'],
+   [0,-.62,0,.16,.13,1.0,0,'#bb2020']]
+    .forEach(([x,y,z,r1,r2,h,rz,c])=>{
+      const m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,14),
+        new THREE.MeshPhongMaterial({color:c}));
+      m.position.set(x,y,z);m.rotation.z=rz;add(g,m,L,2);
+    });
+  // L3: Huesos
+  [[0,.36,0,.06,.055,1.3,0,'#eeeecc'],
+   [.07,-.55,0,.04,.035,1.1,.05,'#eeeecc'],
+   [-.07,-.55,0,.034,.029,1.1,0,'#ddddbb']]
+    .forEach(([x,y,z,r1,r2,h,rz,c])=>{
+      const b=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,10),
+        new THREE.MeshPhongMaterial({color:c,shininess:80}));
+      b.position.set(x,y,z);b.rotation.z=rz;add(g,b,L,3);
+    });
+  g.userData={layers:L,type:'arm'};return g;
+}
+
+function buildRespiratory(){
+  const g=new THREE.Group();g.scale.setScalar(.12);
+  const L=[[],[],[],[]];
+  // L0: Tórax/costillas
+  const th=new THREE.Mesh(new THREE.CylinderGeometry(.52,.44,1.45,18),
+    new THREE.MeshPhongMaterial({color:0xffeedd,transparent:true,opacity:.18,side:THREE.DoubleSide,depthWrite:false}));
+  th.scale.set(1.15,1,.68);add(g,th,L,0);
+  for(let i=0;i<7;i++){
+    const rib=new THREE.Mesh(new THREE.TorusGeometry(.44,.013,6,22,Math.PI),
+      new THREE.MeshPhongMaterial({color:0xddddc8,transparent:true,opacity:.45}));
+    rib.position.y=-.35+i*.12;rib.scale.set(1.1,1,.62);add(g,rib,L,0);
+  }
+  // L1: Pulmones
+  [[ .22,0,0, .9,1.38,.68,'#ff9999'],
+   [-.22,.03,0,.84,1.32,.62,'#ff8585']]
+    .forEach(([x,y,z,sx,sy,sz,c])=>{
+      const ln=new THREE.Mesh(new THREE.SphereGeometry(.28,16,14),
+        new THREE.MeshPhongMaterial({color:c,shininess:20}));
+      ln.position.set(x,y,z);ln.scale.set(sx,sy,sz);add(g,ln,L,1);
+    });
+  // L2: Árbol bronquial
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.044,.04,.52,10),
+    new THREE.MeshPhongMaterial({color:0xddbbff}));
+  tr.position.set(0,.58,.06);add(g,tr,L,2);
+  [[ .14,.28,.02,.03,.028,.3, .5,'#ccaaff'],
+   [-.14,.28,.02,.028,.025,.27,-.55,'#ccaaff']]
+    .forEach(([x,y,z,r1,r2,h,rz,c])=>{
+      const b=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),
+        new THREE.MeshPhongMaterial({color:c}));
+      b.position.set(x,y,z);b.rotation.z=rz;add(g,b,L,2);
+    });
+  for(let i=0;i<4;i++){
+    const sb=new THREE.Mesh(new THREE.CylinderGeometry(.018,.014,.18,6),
+      new THREE.MeshPhongMaterial({color:0xbbaaee}));
+    sb.position.set(.22+i*.025,.1-i*.11,0);sb.rotation.z=.28+i*.14;
+    add(g,sb,L,2);
+  }
+  // L3: Alvéolos
+  [[.3,.1,.06],[.22,-.1,.08],[.27,-.26,0],[-.28,.1,.06],[-.22,-.1,.08],[-.26,-.23,0],[.17,.23,.06],[-.17,.26,.06]]
+    .forEach(([x,y,z])=>{
+      const a=new THREE.Mesh(new THREE.SphereGeometry(.052,8,8),
+        new THREE.MeshPhongMaterial({color:0xffcccc,transparent:true,opacity:.88}));
+      a.position.set(x,y,z);add(g,a,L,3);
+    });
+  g.userData={layers:L,type:'respiratory'};return g;
+}
+
+function add(group,mesh,layers,layer){group.add(mesh);layers[layer].push(mesh);}
+
+function buildModel(type){
+  if(type==='heart') return buildHeart();
+  if(type==='arm') return buildArm();
+  return buildRespiratory();
+}
+
+/* ── LAYERS ─────────────────────────────────────────────── */
+function setLayer(n){
+  S.layer=n;S.metrics.layers++;S.metrics.clicks++;
+  if(S.modelGroup){
+    S.modelGroup.userData.layers.forEach((meshes,i)=>meshes.forEach(m=>m.visible=i<=n));
+  }
+  for(let i=0;i<4;i++) document.getElementById('lb'+i)?.classList.toggle('active',i===n);
+  document.getElementById('layer-badge').textContent=MODELS[S.model].layers[n]||'';
+  beep('layer');toast(MODELS[S.model].layers[n]);
+  updateMetrics();
+}
+function toggleLayerCycle(){setLayer((S.layer+1)%4);}
+
+/* ── STEP SYSTEM ────────────────────────────────────────── */
+function initSteps(){
+  const def=MODELS[S.model];
+  S.step=0;S.confirmed=new Array(def.steps.length).fill(false);
+  S.metrics.stepTimes=new Array(def.steps.length).fill(0);
+  S.metrics.stepErrors=new Array(def.steps.length).fill(0);
+  S.stepStart=Date.now();
+  renderStepUI();
+}
+
+function renderStepUI(){
+  const def=MODELS[S.model];const step=def.steps[S.step];const n=def.steps.length;
+  document.getElementById('sp-num').textContent=`Paso ${S.step+1}`;
+  document.getElementById('sp-title').textContent=step.title;
+  document.getElementById('sp-desc').textContent=step.desc;
+  // dots
+  const dots=document.getElementById('sp-dots');dots.innerHTML='';
+  def.steps.forEach((_,i)=>{
+    const d=document.createElement('div');
+    const w=Math.floor(200/n);
+    d.className='sp-dot '+(S.confirmed[i]?'done':i===S.step?'cur':'todo');
+    d.style.width=w+'px';
+    dots.appendChild(d);
+  });
+  updateMetrics();
+}
+
+function saveStepTime(){
+  S.metrics.stepTimes[S.step]=(S.metrics.stepTimes[S.step]||0)+(Date.now()-S.stepStart)/1000;
+}
+
+function nextStep(){
+  S.metrics.clicks++;
+  const n=MODELS[S.model].steps.length;
+  if(S.step<n-1){saveStepTime();S.step++;S.stepStart=Date.now();renderStepUI();placeHighlight();beep('step');}
+  else endSession();
+  updateMetrics();
+}
+function prevStep(){
+  S.metrics.clicks++;
+  if(S.step>0){saveStepTime();S.step--;S.stepStart=Date.now();renderStepUI();placeHighlight();beep('step');}
+  updateMetrics();
+}
+function confirmStep(){
+  S.metrics.clicks++;
+  if(!S.confirmed[S.step]){
+    saveStepTime();S.confirmed[S.step]=true;S.metrics.stepsOk++;
+    renderStepUI();toast('✓ Paso confirmado',false);beep('success');
+    setTimeout(()=>{
+      if(S.step<MODELS[S.model].steps.length-1) nextStep();
+      else endSession();
+    },700);
+  }
+  updateMetrics();
+}
+function simError(){
+  S.metrics.clicks++;S.metrics.errors++;S.metrics.stepErrors[S.step]=(S.metrics.stepErrors[S.step]||0)+1;
+  toast('❌ Zona incorrecta — intenta de nuevo',true);beep('error');updateMetrics();
+}
+
+/* ── HIGHLIGHT INDICATOR ────────────────────────────────── */
+let hlMesh=null,arrowMesh=null,hlT=0;
+function placeHighlight(){
+  if(!S.modelGroup) return;
+  if(hlMesh){S.modelGroup.remove(hlMesh);hlMesh=null;}
+  if(arrowMesh){S.modelGroup.remove(arrowMesh);arrowMesh=null;}
+  const zone=MODELS[S.model].zones[S.step];if(!zone) return;
+  const rg=new THREE.RingGeometry(.04,.056,28);
+  hlMesh=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:0x00ff99,side:THREE.DoubleSide,transparent:true,opacity:.8}));
+  hlMesh.position.set(...zone);hlMesh.rotation.x=-Math.PI/3;
+  S.modelGroup.add(hlMesh);
+  const ag=new THREE.ConeGeometry(.014,.058,8);
+  arrowMesh=new THREE.Mesh(ag,new THREE.MeshBasicMaterial({color:0x00ff99}));
+  arrowMesh.position.set(zone[0],zone[1]+.09,zone[2]);arrowMesh.rotation.z=Math.PI;
+  S.modelGroup.add(arrowMesh);
+}
+function animateHighlight(t){
+  if(hlMesh){hlT=t*.0015;hlMesh.material.opacity=.3+.5*Math.abs(Math.sin(hlT));hlMesh.scale.setScalar(.88+.16*Math.abs(Math.sin(hlT)));}
+  if(arrowMesh) arrowMesh.position.y=.09+.01*Math.sin(hlT*1.4);
+}
+
+/* ── METRICS UI ─────────────────────────────────────────── */
+function updateMetrics(){
+  const n=MODELS[S.model].steps.length;
+  document.getElementById('m-steps').textContent=`${S.metrics.stepsOk}/${n}`;
+  document.getElementById('m-errors').textContent=S.metrics.errors;
+  document.getElementById('m-clicks').textContent=S.metrics.clicks;
+  document.getElementById('m-layers').textContent=S.metrics.layers;
+}
+
+/* ── TOAST ──────────────────────────────────────────────── */
+let toastTimer;
+function toast(msg,err=false){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.style.display='block';
+  el.className=err?'err':'';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.style.display='none',2400);
+}
+
+/* ── TIMER ──────────────────────────────────────────────── */
+function startTimer(){
+  S.metrics.start=Date.now();
+  S.timerInt=setInterval(()=>{
+    const e=Math.floor((Date.now()-S.metrics.start)/1000);
+    document.getElementById('hud-timer').textContent=fmt(e);
+  },1000);
+}
+function fmt(s){return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;}
+
+/* ── WEBXR SESSION ──────────────────────────────────────── */
+async function startAR(){
+  if(!navigator.xr){showWarn('WebXR no disponible. Necesitas Chrome en Android con ARCore, o Safari iOS con ARKit.');return;}
+  const ok=await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
+  if(!ok){showWarn('Tu dispositivo no soporta AR inmersivo. Usa el Modo Demostración.');return;}
+  initThreeJS();
+  try{
+    S.xrSession=await navigator.xr.requestSession('immersive-ar',{
+      requiredFeatures:['hit-test'],
+      optionalFeatures:['dom-overlay','plane-detection'],
+      domOverlay:{root:document.getElementById('overlay')}
+    });
+    S.renderer.xr.setReferenceSpaceType('local');
+    await S.renderer.xr.setSession(S.xrSession);
+    S.xrSession.addEventListener('end',()=>{S.renderer.setAnimationLoop(null);});
+    const vs=await S.xrSession.requestReferenceSpace('viewer');
+    S.hitSrc=await S.xrSession.requestHitTestSource({space:vs});
+    showOverlay();S.renderer.setAnimationLoop(xrFrame);
+  }catch(err){showWarn('Error AR: '+err.message);}
+}
+
+/* ── DEMO MODE ──────────────────────────────────────────── */
+function startDemo(){
+  S.demoMode=true;initThreeJS();
+  S.camera.position.set(0,.18,.6);S.camera.lookAt(0,0,0);
+  const grid=new THREE.GridHelper(2,24,0x002244,0x001533);S.scene.add(grid);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(4,4),
+    new THREE.MeshBasicMaterial({color:0x040c18}));
+  floor.rotation.x=-Math.PI/2;floor.position.y=-.001;S.scene.add(floor);
+  document.getElementById('demo-banner').style.display='block';
+  showOverlay();
+  placeModelAt(new THREE.Vector3(0,0,0));
+  setupTouchRotation(S.renderer.domElement);
+  let last=0;
+  S.renderer.setAnimationLoop((t)=>{
+    if(S.modelGroup){
+      if(S.model==='heart') S.modelGroup.scale.setScalar(1+.012*Math.sin(t*.0019*2*Math.PI));
+      if(S.model==='respiratory'){const b=1+.025*Math.sin(t*.00095*2*Math.PI);S.modelGroup.scale.set(b,1+.035*Math.sin(t*.00095*2*Math.PI),b);}
+      animateHighlight(t);
+    }
+    S.renderer.render(S.scene,S.camera);
+  });
+}
+
+function showOverlay(){
+  const ss=document.getElementById('start-screen');
+  ss.style.opacity='0';setTimeout(()=>ss.style.display='none',380);
+  document.getElementById('overlay').classList.add('visible');
+  document.getElementById('hud-model-name').textContent=MODELS[S.model].name;
+  document.getElementById('hud-proc-name').textContent=MODELS[S.model].proc;
+  initSteps();startTimer();
+  if(!S.demoMode) setupTouchRotation(S.renderer.domElement);
+}
+
+/* ── XR FRAME ───────────────────────────────────────────── */
+function xrFrame(time,frame){
+  if(!frame){S.renderer.render(S.scene,S.camera);return;}
+  const rs=S.renderer.xr.getReferenceSpace();
+  if(S.hitSrc&&!S.placed){
+    const hits=frame.getHitTestResults(S.hitSrc);
+    if(hits.length>0){
+      const pose=hits[0].getPose(rs);
+      if(pose){
+        S.reticle.visible=true;S.reticle.matrix.fromArray(pose.transform.matrix);
+        document.getElementById('scan-hint').style.opacity='0';
+      }
+    }else{S.reticle.visible=false;}
+  }
+  if(S.modelGroup){
+    if(S.model==='heart') S.modelGroup.scale.setScalar(1+.012*Math.sin(time*.0019*2*Math.PI));
+    if(S.model==='respiratory'){const b=1+.025*Math.sin(time*.00095*2*Math.PI);S.modelGroup.scale.set(b,1+.035*Math.sin(time*.00095*2*Math.PI),b);}
+    animateHighlight(time);
+  }
+  S.renderer.render(S.scene,S.camera);
+}
+
+/* ── MODEL PLACEMENT ────────────────────────────────────── */
+function placeModelAt(pos){
+  const mg=buildModel(S.model);mg.position.copy(pos);mg.position.y+=.04;
+  S.modelGroup=mg;S.scene.add(mg);S.placed=true;S.reticle.visible=false;
+  document.getElementById('scan-hint').style.display='none';
+  setLayer(0);setTimeout(placeHighlight,500);
+  beep('place');toast('Modelo desplegado • Arrastra para rotar • Pinza para escalar');
+  updateMetrics();
+}
+
+/* ── TOUCH / GESTURE HANDLING ───────────────────────────── */
+function setupTouchRotation(canvas){
+  let lx=0,ly=0,pd=null,rotating=false;
+  canvas.addEventListener('touchstart',e=>{
+    e.preventDefault();S.metrics.clicks++;updateMetrics();
+    if(!S.placed&&!S.demoMode){
+      if(S.reticle.visible){
+        const p=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3();
+        S.reticle.matrix.decompose(p,q,sc);placeModelAt(p);
+      }
+      return;
+    }
+    if(e.touches.length===1){rotating=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}
+    else if(e.touches.length===2){pd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}
+  },{passive:false});
+  canvas.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(!S.modelGroup||!S.placed) return;
+    if(e.touches.length===1&&rotating){
+      const dx=e.touches[0].clientX-lx,dy=e.touches[0].clientY-ly;
+      S.modelGroup.rotation.y+=dx*.008;S.modelGroup.rotation.x+=dy*.006;
+      lx=e.touches[0].clientX;ly=e.touches[0].clientY;
+    } else if(e.touches.length===2&&pd!=null){
+      const nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      const sc=Math.max(.25,Math.min(3.2,S.modelGroup.scale.x*(nd/pd)));
+      S.modelGroup.scale.setScalar(sc);pd=nd;
+    }
+  },{passive:false});
+  canvas.addEventListener('touchend',()=>{rotating=false;pd=null;},{passive:false});
+  // Mouse for desktop demo
+  let md=false,mx=0,my=0;
+  canvas.addEventListener('mousedown',e=>{md=true;mx=e.clientX;my=e.clientY;S.metrics.clicks++;updateMetrics();});
+  window.addEventListener('mousemove',e=>{
+    if(!md||!S.modelGroup||!S.placed) return;
+    S.modelGroup.rotation.y+=(e.clientX-mx)*.007;
+    S.modelGroup.rotation.x+=(e.clientY-my)*.006;
+    mx=e.clientX;my=e.clientY;
+  });
+  window.addEventListener('mouseup',()=>md=false);
+  canvas.addEventListener('wheel',e=>{
+    if(!S.modelGroup||!S.placed) return;
+    const sc=Math.max(.25,Math.min(3.2,S.modelGroup.scale.x*(1-e.deltaY*.001)));
+    S.modelGroup.scale.setScalar(sc);
+  },{passive:true});
+}
+
+/* ── SESSION END ────────────────────────────────────────── */
+function endSession(){
+  clearInterval(S.timerInt);
+  saveStepTime();
+  S.metrics.end=Date.now();
+  S.metrics.total=Math.floor((S.metrics.end-S.metrics.start)/1000);
+  if(S.xrSession) S.xrSession.end().catch(()=>{});
+  if(S.demoMode) S.renderer.setAnimationLoop(null);
+  document.getElementById('overlay').classList.remove('visible');
+  buildSurveyUI();
+  document.getElementById('survey-modal').classList.add('open');
+}
+
+/* ── SURVEY ─────────────────────────────────────────────── */
+function buildSurveyUI(){
+  ['ease','content','ar','steps','overall'].forEach(q=>{
+    const el=document.getElementById('sq-'+q);
+    el.innerHTML='';
+    for(let i=1;i<=5;i++){
+      const b=document.createElement('button');
+      b.className='sv-star';b.textContent=i;b.dataset.q=q;b.dataset.v=i;
+      b.onclick=()=>rateSurvey(q,i);
+      el.appendChild(b);
+    }
+  });
+}
+function rateSurvey(q,v){
+  S.metrics.survey[q]=v;
+  const container=document.getElementById('sq-'+q);
+  container.querySelectorAll('.sv-star').forEach((b,i)=>b.classList.toggle('on',i<v));
+}
+function submitSurvey(){
+  document.getElementById('survey-modal').classList.remove('open');
+  showResults();
+}
+
+/* ── RESULTS ────────────────────────────────────────────── */
+function showResults(){
+  const def=MODELS[S.model];const n=def.steps.length;const t=S.metrics.total;
+  const score=Math.max(0,Math.round(100-(S.metrics.errors*8)-(((n-S.metrics.stepsOk)/n)*40)));
+  document.getElementById('rs-model-lbl').textContent=`${def.name} — ${def.proc}`;
+  document.getElementById('rs-time').textContent=fmt(t);
+  document.getElementById('rs-steps').textContent=`${S.metrics.stepsOk}/${n}`;
+  document.getElementById('rs-errors').textContent=S.metrics.errors;
+  document.getElementById('rs-score').textContent=score+'%';
+  setTimeout(()=>{
+    const fill=document.getElementById('score-fill');
+    fill.style.width=score+'%';
+    fill.style.background=score>=80?'linear-gradient(90deg,#00d4ff,#00ff99)':score>=60?'linear-gradient(90deg,#ffaa00,#ffdd44)':'linear-gradient(90deg,#ff4466,#ff8899)';
+  },150);
+  document.getElementById('score-pct-text').textContent=`${score} / 100`;
+  // Steps breakdown
+  const list=document.getElementById('bd-steps-list');list.innerHTML='';
+  def.steps.forEach((s,i)=>{
+    const t=S.metrics.stepTimes[i]||0;const err=S.metrics.stepErrors[i]||0;
+    const row=document.createElement('div');row.className='bd-row';
+    row.innerHTML=`<div class="bd-n">${i+1}</div>
+      <div class="bd-name">${s.title.substring(0,40)}${s.title.length>40?'…':''}</div>
+      <div class="bd-time">${fmt(Math.round(t))}</div>
+      <div class="bd-stat ${err>0?'er':'ok'}">${err>0?err+' err':'✓'}</div>`;
+    list.appendChild(row);
+  });
+  // Survey breakdown
+  const sl=document.getElementById('bd-survey-list');sl.innerHTML='';
+  const qlabels={ease:'Facilidad de uso',content:'Contenido anatómico',ar:'Experiencia AR/3D',steps:'Pasos guiados',overall:'Satisfacción general'};
+  let hasAny=false;
+  Object.entries(S.metrics.survey).forEach(([q,v])=>{
+    if(!v) return;hasAny=true;
+    const row=document.createElement('div');row.className='bd-row';
+    row.innerHTML=`<div class="bd-name">${qlabels[q]||q}</div>
+      <div class="bd-time" style="color:var(--amber);">${'★'.repeat(v)}${'☆'.repeat(5-v)} ${v}/5</div>`;
+    sl.appendChild(row);
+  });
+  if(!hasAny) sl.innerHTML='<div style="font-size:.75rem;color:var(--text2);padding:.4rem 0;">No se completó la encuesta.</div>';
+  document.getElementById('results-screen').style.display='block';
+}
+
+/* ── EXPORT ─────────────────────────────────────────────── */
+function exportMetrics(){
+  const def=MODELS[S.model];const n=def.steps.length;
+  const t=S.metrics.total;
+  const score=Math.max(0,Math.round(100-(S.metrics.errors*8)-(((n-S.metrics.stepsOk)/n)*40)));
+  const data={
+    metadatos:{app:'MedAR v1.0',fecha:new Date().toISOString(),modelo:def.name,procedimiento:def.proc,modo:S.demoMode?'demo':'ar'},
+    desempeno:{duracion_segundos:t,duracion_formateada:fmt(t),pasos_completados:S.metrics.stepsOk,total_pasos:n,errores_totales:S.metrics.errors,clics_totales:S.metrics.clicks,cambios_de_capa:S.metrics.layers,puntuacion_porcentaje:score},
+    pasos:def.steps.map((s,i)=>({indice:i+1,titulo:s.title,tiempo_segundos:Math.round(S.metrics.stepTimes[i]||0),errores:S.metrics.stepErrors[i]||0,completado:!!S.confirmed[i]})),
+    encuesta:S.metrics.survey
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`medar-${S.model}-${Date.now()}.json`;a.click();
+  toast('Métricas exportadas');
+}
+
+/* ── RESTART ────────────────────────────────────────────── */
+function restartApp(){
+  document.getElementById('results-screen').style.display='none';
+  document.getElementById('start-screen').style.display='flex';
+  document.getElementById('start-screen').style.opacity='1';
+  document.getElementById('overlay').classList.remove('visible');
+  clearInterval(S.timerInt);
+  S.placed=false;S.demoMode=false;S.modelGroup=null;S.hitSrc=null;S.xrSession=null;
+  S.layer=0;S.step=0;S.confirmed=[];
+  Object.assign(S.metrics,{start:null,end:null,total:0,stepTimes:[],stepErrors:[],errors:0,clicks:0,layers:0,stepsOk:0,survey:{}});
+  if(S.scene){S.scene.children.length=0;}
+  if(S.renderer){S.renderer.setAnimationLoop(null);
+    const c=S.renderer.domElement;if(c.parentNode) c.parentNode.removeChild(c);}
+  S.renderer=null;S.scene=null;S.camera=null;S.reticle=null;
+  document.getElementById('demo-banner').style.display='none';
+}
+
+/* ── INIT ───────────────────────────────────────────────── */
+function showWarn(msg){
+  const w=document.getElementById('compat-warn');
+  w.style.display='block';w.textContent=msg;
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  // Model cards
+  document.querySelectorAll('.model-card').forEach(c=>c.addEventListener('click',()=>{
+    document.querySelectorAll('.model-card').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');S.model=c.dataset.model;
+  }));
+  document.getElementById('start-btn').addEventListener('click',startAR);
+  document.getElementById('demo-btn').addEventListener('click',startDemo);
+  // Check AR support
+  if(!navigator.xr){
+    showWarn('WebXR no disponible en este navegador. Usa Chrome (Android) o Safari (iOS). El Modo Demo funciona en cualquier dispositivo.');
+    document.getElementById('start-btn').disabled=true;
+  } else {
+    navigator.xr.isSessionSupported('immersive-ar').then(ok=>{
+      if(!ok){
+        showWarn('AR inmersivo no soportado. Necesitas ARCore (Android) o ARKit (iOS). El Modo Demo está disponible.');
+        document.getElementById('start-btn').disabled=true;
+      }
+    }).catch(()=>{});
+  }
+  // Build survey stars on load
+  buildSurveyUI();
+  window.addEventListener('resize',()=>{
+    if(S.renderer&&!S.xrSession){
+      S.renderer.setSize(window.innerWidth,window.innerHeight);
+      if(S.camera){S.camera.aspect=window.innerWidth/window.innerHeight;S.camera.updateProjectionMatrix();}
+    }
+  });
+});
+</script>
+</body>
+</html>
