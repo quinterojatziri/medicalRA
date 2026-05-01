@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NeuroAR — Simulador de Neurocirugía</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#040810;--surface:rgba(4,12,24,0.9);--surface2:rgba(8,20,40,0.85);
+  --cyan:#00D4FF;--cyan2:#0099BB;--cyan-dim:rgba(0,212,255,0.15);
+  --red:#FF3366;--red-dim:rgba(255,51,102,0.15);
+  --amber:#FFAA00;--amber-dim:rgba(255,170,0,0.12);
+  --green:#00FF88;--green-dim:rgba(0,255,136,0.12);
+  --white:rgba(220,235,255,0.92);--dim:rgba(180,210,240,0.45);--dimmer:rgba(180,210,240,0.22);
+  --border:rgba(0,212,255,0.12);--border2:rgba(0,212,255,0.25);
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+body{background:var(--bg);font-family:var(--sans);color:var(--white);overflow:hidden;height:100dvh;width:100dvw}
+
+/* ── SPLASH ── */
+#splash{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  padding-bottom:max(40px,env(safe-area-inset-bottom,20px));
+  z-index:999;overflow:hidden;
+}
+.splash-bg{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse 80% 60% at 50% 30%, rgba(0,150,255,0.08) 0%, transparent 70%),
+             radial-gradient(ellipse 40% 40% at 70% 60%, rgba(255,51,102,0.05) 0%, transparent 60%);
+}
+.brain-preview{
+  position:absolute;top:8%;left:50%;transform:translateX(-50%);
+  width:260px;height:260px;
+}
+.brain-preview canvas{width:100%;height:100%}
+.splash-content{position:relative;z-index:2;width:100%;max-width:380px;padding:0 24px}
+.splash-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:0.15em;
+  color:var(--cyan);margin-bottom:12px;text-transform:uppercase;
+  border:1px solid var(--border2);display:inline-block;padding:4px 10px;border-radius:4px;
+}
+.splash-title{font-size:36px;font-weight:600;line-height:1.05;margin-bottom:8px;letter-spacing:-1px}
+.splash-title span{color:var(--cyan)}
+.splash-sub{font-size:14px;color:var(--dim);line-height:1.6;margin-bottom:28px}
+.start-btn{
+  width:100%;padding:17px;
+  background:linear-gradient(135deg,var(--cyan2),rgba(0,80,120,0.9));
+  border:1px solid var(--cyan);border-radius:12px;
+  color:white;font-family:var(--sans);font-size:15px;font-weight:600;
+  cursor:pointer;letter-spacing:0.3px;
+  box-shadow:0 0 30px rgba(0,212,255,0.2);
+  transition:all 0.2s;
+}
+.start-btn:active{transform:scale(0.98);opacity:0.9}
+.disclaimer{font-size:11px;color:var(--dimmer);text-align:center;margin-top:12px;line-height:1.5;padding:0 8px}
+
+/* ── MAIN APP ── */
+#app{position:fixed;inset:0;display:none;flex-direction:column}
+
+/* Canvas takes full screen */
+#glcanvas{
+  position:absolute;inset:0;width:100%;height:100%;
+  touch-action:none;
+}
+#videoEl{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+
+/* ── TOP BAR ── */
+#topbar{
+  position:absolute;top:0;left:0;right:0;
+  padding:max(52px,env(safe-area-inset-top,16px)) 16px 12px;
+  background:linear-gradient(to bottom,rgba(4,8,16,0.8) 0%,transparent 100%);
+  display:flex;align-items:center;justify-content:space-between;
+  z-index:20;pointer-events:none;
+}
+.top-left{pointer-events:auto}
+.back-btn{
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(0,0,0,0.5);border:1px solid var(--border2);
+  color:var(--cyan);font-size:16px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+.top-center{text-align:center}
+.phase-name{font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:0.1em;text-transform:uppercase}
+.phase-step{font-size:12px;color:var(--dim);margin-top:2px}
+.top-right{pointer-events:auto;display:flex;gap:8px}
+.icon-btn{
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(0,0,0,0.5);border:1px solid var(--border);
+  color:var(--white);font-size:15px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+
+/* ── VITALS ── */
+#vitals{
+  position:absolute;top:max(110px,env(safe-area-inset-top,16px) + 70px);right:14px;
+  z-index:20;display:flex;flex-direction:column;gap:6px;pointer-events:none;
+}
+.vital{
+  background:rgba(4,8,20,0.75);border:1px solid var(--border);
+  border-radius:8px;padding:5px 10px;min-width:72px;
+  font-family:var(--mono);
+}
+.vital-label{font-size:8px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase}
+.vital-val{font-size:14px;font-weight:700;color:var(--cyan)}
+.vital-val.warn{color:var(--amber)}
+.vital-val.danger{color:var(--red);animation:blink 0.8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* ── INSTRUMENT DOCK ── */
+#instr-dock{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  z-index:20;display:flex;flex-direction:column;gap:8px;
+}
+.instr-btn{
+  width:52px;height:52px;border-radius:14px;
+  background:rgba(4,8,20,0.8);border:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all 0.2s;gap:2px;
+}
+.instr-btn.active{border-color:var(--cyan);background:var(--cyan-dim);box-shadow:0 0 12px rgba(0,212,255,0.3)}
+.instr-btn:active{transform:scale(0.94)}
+.instr-icon{font-size:20px}
+.instr-label{font-size:8px;color:var(--dim);font-family:var(--mono);letter-spacing:0.05em}
+.instr-btn.active .instr-label{color:var(--cyan)}
+
+/* ── LAYER SELECTOR ── */
+#layer-dock{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  z-index:20;display:flex;flex-direction:column;gap:6px;
+}
+.layer-btn{
+  width:42px;height:42px;border-radius:10px;
+  background:rgba(4,8,20,0.8);border:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all 0.2s;gap:1px;
+}
+.layer-btn.active{border-color:var(--amber);background:var(--amber-dim)}
+.layer-dot{width:12px;height:12px;border-radius:50%;border:2px solid currentColor}
+.layer-lbl{font-size:7px;color:var(--dim);font-family:var(--mono)}
+.layer-btn.active .layer-lbl{color:var(--amber)}
+
+/* ── HUD BOTTOM ── */
+#hud{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(to top,var(--surface) 0%,var(--surface2) 70%,transparent 100%);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  padding:16px 16px max(20px,env(safe-area-inset-bottom,12px));
+  z-index:20;border-top:1px solid var(--border);
+}
+.step-dots{display:flex;gap:5px;margin-bottom:12px}
+.sdot{flex:1;height:2px;border-radius:1px;background:var(--dimmer);transition:all 0.4s}
+.sdot.done{background:var(--cyan)}
+.sdot.active{background:var(--amber)}
+.step-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.step-num{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.step-title{font-size:17px;font-weight:600;line-height:1.2;flex:1;padding-right:8px}
+.step-instr{font-size:13px;color:var(--dim);line-height:1.55;margin-bottom:14px}
+.hud-actions{display:flex;gap:8px}
+.hud-btn{
+  flex:1;padding:13px 8px;border-radius:12px;
+  border:1px solid var(--border);background:rgba(255,255,255,0.04);
+  color:var(--white);font-family:var(--sans);font-size:12px;font-weight:600;
+  cursor:pointer;text-align:center;transition:all 0.2s;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+.hud-btn .hb-icon{font-size:16px}
+.hud-btn:active{transform:scale(0.97);background:rgba(255,255,255,0.08)}
+.hud-btn.confirm{background:rgba(0,150,80,0.2);border-color:var(--green);color:var(--green)}
+.hud-btn.danger{background:var(--red-dim);border-color:var(--red);color:var(--red)}
+
+/* ── SCAN OVERLAY ── */
+#scan-overlay{
+  position:absolute;inset:0;z-index:15;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  pointer-events:none;
+}
+.scan-ring{
+  width:220px;height:220px;border-radius:50%;
+  border:2px solid rgba(0,212,255,0.4);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;animation:ring-pulse 2s ease-in-out infinite;
+}
+.scan-ring::before{
+  content:'';position:absolute;inset:-12px;border-radius:50%;
+  border:1px solid rgba(0,212,255,0.15);
+}
+.scan-ring::after{
+  content:'';position:absolute;inset:12px;border-radius:50%;
+  border:1px solid rgba(0,212,255,0.2);
+}
+@keyframes ring-pulse{0%,100%{border-color:rgba(0,212,255,0.3);transform:scale(1)}50%{border-color:rgba(0,212,255,0.7);transform:scale(1.03)}}
+.scan-crosshair{
+  width:40px;height:40px;position:relative;
+}
+.scan-crosshair::before,.scan-crosshair::after{
+  content:'';position:absolute;background:var(--cyan);
+  border-radius:1px;
+}
+.scan-crosshair::before{width:2px;height:100%;left:50%;transform:translateX(-50%)}
+.scan-crosshair::after{height:2px;width:100%;top:50%;transform:translateY(-50%)}
+.scan-line{
+  position:absolute;left:0;right:0;height:1px;
+  background:linear-gradient(to right,transparent,var(--cyan),transparent);
+  animation:scan-anim 2s linear infinite;
+}
+@keyframes scan-anim{0%{top:0;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:100%;opacity:0}}
+.scan-text{
+  margin-top:20px;font-family:var(--mono);font-size:12px;color:var(--cyan);
+  text-align:center;letter-spacing:0.08em;
+}
+.scan-sub{font-size:11px;color:var(--dim);margin-top:4px;text-align:center}
+
+/* ── PROCEDURE OVERLAY ── */
+#proc-overlay{
+  position:absolute;inset:0;background:rgba(0,0,0,0.88);z-index:30;
+  display:none;flex-direction:column;align-items:stretch;
+  padding:max(60px,env(safe-area-inset-top,16px) + 20px) 20px max(28px,env(safe-area-inset-bottom,12px));
+}
+.proc-header{margin-bottom:6px}
+.proc-tag{font-family:var(--mono);font-size:9px;color:var(--cyan);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px}
+.proc-title{font-size:20px;font-weight:700;margin-bottom:6px}
+.proc-desc{font-size:13px;color:var(--dim);line-height:1.55;margin-bottom:20px}
+.proc-zones{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1}
+.pzone{
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);
+  border-radius:14px;padding:16px 12px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:all 0.2s;
+}
+.pzone:active{transform:scale(0.97)}
+.pzone.correct{border-color:var(--green);background:rgba(0,255,136,0.08);animation:correct-pop 0.4s}
+.pzone.wrong{border-color:var(--red);background:var(--red-dim);animation:shake 0.35s}
+@keyframes correct-pop{0%{transform:scale(1)}50%{transform:scale(1.04)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+.pzone-icon{font-size:30px}
+.pzone-name{font-size:13px;font-weight:600;text-align:center}
+.pzone-hint{font-size:10px;color:var(--dim);text-align:center;line-height:1.4}
+.proc-close-btn{
+  margin-top:14px;padding:14px;border-radius:12px;
+  background:rgba(255,255,255,0.05);border:1px solid var(--border);
+  color:var(--dim);font-family:var(--sans);font-size:14px;cursor:pointer;
+}
+
+/* ── METRICS ── */
+#metrics-overlay{
+  position:absolute;inset:0;background:var(--bg);z-index:40;
+  display:none;flex-direction:column;overflow-y:auto;
+  padding:max(60px,env(safe-area-inset-top,16px) + 16px) 20px max(28px,env(safe-area-inset-bottom,16px));
+}
+.met-tag{font-family:var(--mono);font-size:9px;color:var(--cyan);letter-spacing:0.12em;margin-bottom:8px}
+.met-title{font-size:26px;font-weight:700;margin-bottom:4px}
+.met-sub{font-size:13px;color:var(--dim);margin-bottom:24px}
+.score-display{
+  text-align:center;margin-bottom:24px;
+  padding:24px;background:rgba(0,212,255,0.04);
+  border:1px solid var(--border2);border-radius:16px;
+}
+.score-num{font-family:var(--mono);font-size:64px;font-weight:700;color:var(--cyan);line-height:1}
+.score-lbl{font-size:12px;color:var(--dim);margin-top:4px;font-family:var(--mono);letter-spacing:0.1em}
+.met-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.met-card{
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);
+  border-radius:12px;padding:14px;
+}
+.met-card-label{font-size:10px;color:var(--dim);font-family:var(--mono);letter-spacing:0.08em;margin-bottom:4px}
+.met-card-val{font-size:24px;font-weight:700}
+.times-section h3{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--dim)}
+.time-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.time-row-name{font-size:10px;color:var(--dimmer);width:80px;flex-shrink:0;line-height:1.3}
+.time-bar{flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden}
+.time-fill{height:100%;background:var(--cyan);border-radius:2px;transition:width 1s ease}
+.time-val{font-size:11px;color:var(--dim);font-family:var(--mono);min-width:36px;text-align:right}
+.met-btn{
+  width:100%;padding:15px;border-radius:12px;margin-top:10px;
+  font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;
+  transition:all 0.2s;
+}
+.met-btn:active{transform:scale(0.98)}
+.met-btn-primary{background:linear-gradient(135deg,var(--cyan2),rgba(0,80,120,0.9));border:1px solid var(--cyan);color:white}
+.met-btn-ghost{background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--dim)}
+
+/* ── SURVEY ── */
+#survey-overlay{
+  position:absolute;inset:0;background:var(--bg);z-index:45;
+  display:none;flex-direction:column;overflow-y:auto;
+  padding:max(60px,env(safe-area-inset-top,16px) + 16px) 20px max(28px,env(safe-area-inset-bottom,16px));
+}
+.surv-q{margin-bottom:22px}
+.surv-q label{font-size:14px;font-weight:500;display:block;margin-bottom:10px;line-height:1.4}
+.star-row{display:flex;gap:10px}
+.star{font-size:30px;opacity:0.25;cursor:pointer;transition:all 0.15s;filter:grayscale(1)}
+.star.lit{opacity:1;filter:none}
+.surv-opts{display:flex;flex-direction:column;gap:7px}
+.surv-opt{
+  padding:12px 15px;border-radius:10px;
+  border:1px solid var(--border);background:rgba(255,255,255,0.03);
+  font-size:13px;cursor:pointer;transition:all 0.2s;line-height:1.4;
+}
+.surv-opt.sel{border-color:var(--cyan);background:var(--cyan-dim);color:var(--cyan)}
+
+/* ── TOAST ── */
+#toast{
+  position:absolute;top:max(105px,env(safe-area-inset-top,16px) + 65px);left:50%;
+  transform:translateX(-50%) translateY(-8px);
+  background:rgba(0,30,50,0.95);border:1px solid var(--border2);
+  padding:9px 18px;border-radius:20px;font-size:13px;font-weight:500;
+  font-family:var(--mono);color:var(--cyan);
+  opacity:0;transition:all 0.3s;pointer-events:none;z-index:50;
+  white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:var(--red);color:var(--red)}
+
+/* ── GESTURE CURSOR ── */
+#gesture-cursor{
+  position:absolute;width:32px;height:32px;
+  border-radius:50%;border:2px solid var(--amber);
+  pointer-events:none;z-index:25;display:none;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 10px rgba(255,170,0,0.5);
+}
+#gesture-cursor.active{display:block}
+#gesture-cursor .gc-inner{
+  width:6px;height:6px;background:var(--amber);border-radius:50%;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+}
+
+/* ── BISTURI CURSOR ── */
+#bisturi-cursor{
+  position:absolute;pointer-events:none;z-index:26;display:none;
+  transform:translate(-10px,-38px);
+  font-size:28px;filter:drop-shadow(0 0 6px rgba(0,212,255,0.6));
+}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-bg"></div>
+  <canvas id="splash-canvas" width="260" height="260" style="position:absolute;top:8%;left:50%;transform:translateX(-50%);width:260px;height:260px"></canvas>
+  <div class="splash-content">
+    <div class="splash-tag">WebXR · Realidad Aumentada</div>
+    <h1 class="splash-title">Neuro<span>AR</span><br>Cirugía</h1>
+    <p class="splash-sub">Simulador de neurocirugía para extirpación de tumor cerebral. Capas anatómicas reales, bisturí controlado por gestos y retroalimentación en tiempo real.</p>
+    <button class="start-btn" onclick="startApp()">Iniciar simulación →</button>
+    <p class="disclaimer">Requiere cámara trasera y Chrome 87+ / Safari 15+.<br>Modo simulación disponible sin cámara.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <video id="videoEl" autoplay muted playsinline></video>
+  <canvas id="glcanvas"></canvas>
+
+  <!-- Scan overlay -->
+  <div id="scan-overlay">
+    <div class="scan-ring">
+      <div class="scan-crosshair"></div>
+    </div>
+    <div class="scan-line"></div>
+    <p class="scan-text">ESCANEANDO SUPERFICIE</p>
+    <p class="scan-sub">Apunta a una superficie plana o marcador</p>
+  </div>
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <div class="top-left"><div class="back-btn" onclick="goBack()">←</div></div>
+    <div class="top-center">
+      <div class="phase-name" id="phase-name">Neurocirugía</div>
+      <div class="phase-step" id="phase-step">Paso 1 / 8</div>
+    </div>
+    <div class="top-right">
+      <div class="icon-btn" onclick="toggleAudio()" id="audio-btn">🔊</div>
+      <div class="icon-btn" onclick="showProcedure()">🎯</div>
+    </div>
+  </div>
+
+  <!-- Vitals -->
+  <div id="vitals">
+    <div class="vital"><div class="vital-label">PULSO</div><div class="vital-val" id="v-pulse">72</div></div>
+    <div class="vital"><div class="vital-label">SAT O₂</div><div class="vital-val" id="v-sat">99%</div></div>
+    <div class="vital"><div class="vital-label">PRESIÓN</div><div class="vital-val" id="v-bp">120/80</div></div>
+    <div class="vital"><div class="vital-label">TIEMPO</div><div class="vital-val" id="v-time" style="color:var(--amber)">0:00</div></div>
+  </div>
+
+  <!-- Instrument dock -->
+  <div id="instr-dock">
+    <div class="instr-btn active" onclick="setInstr('bisturi',this)" id="i-bisturi"><span class="instr-icon">🔪</span><span class="instr-label">Bisturí</span></div>
+    <div class="instr-btn" onclick="setInstr('fresa',this)" id="i-fresa"><span class="instr-icon">🌀</span><span class="instr-label">Fresa</span></div>
+    <div class="instr-btn" onclick="setInstr('aspirador',this)" id="i-aspirador"><span class="instr-icon">💨</span><span class="instr-label">Aspirad.</span></div>
+    <div class="instr-btn" onclick="setInstr('coagulador',this)" id="i-coagulador"><span class="instr-icon">⚡</span><span class="instr-label">Coagul.</span></div>
+    <div class="instr-btn" onclick="setInstr('sutura',this)" id="i-sutura"><span class="instr-icon">🧵</span><span class="instr-label">Sutura</span></div>
+  </div>
+
+  <!-- Layer dock -->
+  <div id="layer-dock">
+    <div class="layer-btn active" onclick="setLayer('cuero',this)"><div class="layer-dot" style="color:#C4956A;background:#C4956A"></div><span class="layer-lbl">PIEL</span></div>
+    <div class="layer-btn" onclick="setLayer('craneo',this)"><div class="layer-dot" style="color:#E0D8BC;background:#E0D8BC"></div><span class="layer-lbl">CRÁNEO</span></div>
+    <div class="layer-btn" onclick="setLayer('dura',this)"><div class="layer-dot" style="color:#F5C6A0;background:#F5C6A0"></div><span class="layer-lbl">DURA</span></div>
+    <div class="layer-btn" onclick="setLayer('cerebro',this)"><div class="layer-dot" style="color:#E8A0A0;background:#E8A0A0"></div><span class="layer-lbl">CEREBRO</span></div>
+    <div class="layer-btn" onclick="setLayer('tumor',this)"><div class="layer-dot" style="color:#8B4FC8;background:#8B4FC8"></div><span class="layer-lbl">TUMOR</span></div>
+  </div>
+
+  <!-- HUD Bottom -->
+  <div id="hud">
+    <div class="step-dots" id="step-dots"></div>
+    <div class="step-header">
+      <div>
+        <div class="step-num" id="step-num">PASO 01</div>
+        <div class="step-title" id="step-title">Preparando...</div>
+      </div>
+    </div>
+    <div class="step-instr" id="step-instr">Inicializando módulo quirúrgico...</div>
+    <div class="hud-actions">
+      <div class="hud-btn" onclick="prevStep()"><span class="hb-icon">◀</span>Anterior</div>
+      <div class="hud-btn confirm" onclick="nextStep()"><span class="hb-icon">✓</span>Confirmar</div>
+      <div class="hud-btn" onclick="showProcedure()"><span class="hb-icon">🎯</span>Zona</div>
+    </div>
+  </div>
+
+  <!-- Gesture cursor -->
+  <div id="gesture-cursor"><div class="gc-inner"></div></div>
+  <div id="bisturi-cursor">🔪</div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <!-- Procedure overlay -->
+  <div id="proc-overlay">
+    <div class="proc-header">
+      <div class="proc-tag" id="proc-tag">Procedimiento quirúrgico</div>
+      <div class="proc-title" id="proc-title">Selecciona la zona</div>
+      <div class="proc-desc" id="proc-desc">Identifica la zona anatómica correcta.</div>
+    </div>
+    <div class="proc-zones" id="proc-zones"></div>
+    <button class="proc-close-btn" onclick="closeProcedure()">Cancelar</button>
+  </div>
+
+  <!-- Metrics overlay -->
+  <div id="metrics-overlay">
+    <div class="met-tag">SESIÓN COMPLETADA</div>
+    <div class="met-title">Resultados</div>
+    <div class="met-sub" id="met-sub">Neurocirugía · Extirpación de tumor</div>
+    <div class="score-display">
+      <div class="score-num" id="score-num">—</div>
+      <div class="score-lbl">PUNTUACIÓN QUIRÚRGICA</div>
+    </div>
+    <div class="met-grid">
+      <div class="met-card"><div class="met-card-label">TIEMPO TOTAL</div><div class="met-card-val" id="m-time" style="color:var(--cyan)">—</div></div>
+      <div class="met-card"><div class="met-card-label">ERRORES</div><div class="met-card-val" id="m-errors" style="color:var(--red)">—</div></div>
+      <div class="met-card"><div class="met-card-label">PRECISIÓN</div><div class="met-card-val" id="m-acc" style="color:var(--green)">—</div></div>
+      <div class="met-card"><div class="met-card-label">PASOS OK</div><div class="met-card-val" id="m-steps" style="color:var(--amber)">—</div></div>
+    </div>
+    <div class="times-section"><h3>Tiempo por paso</h3><div id="time-bars"></div></div>
+    <button class="met-btn met-btn-primary" onclick="openSurvey()">Cuestionario de satisfacción →</button>
+    <button class="met-btn met-btn-ghost" style="margin-top:8px" onclick="restartSim()">Reiniciar simulación</button>
+  </div>
+
+  <!-- Survey overlay -->
+  <div id="survey-overlay">
+    <div class="met-tag">CUESTIONARIO</div>
+    <div class="met-title" style="margin-bottom:4px">Retroalimentación</div>
+    <div class="met-sub" style="margin-bottom:22px">Tu evaluación mejora el simulador</div>
+    <div class="surv-q">
+      <label>1. ¿Qué tan realista fue la simulación quirúrgica?</label>
+      <div class="star-row" id="sr-real"><span class="star" onclick="rate('real',1)">⭐</span><span class="star" onclick="rate('real',2)">⭐</span><span class="star" onclick="rate('real',3)">⭐</span><span class="star" onclick="rate('real',4)">⭐</span><span class="star" onclick="rate('real',5)">⭐</span></div>
+    </div>
+    <div class="surv-q">
+      <label>2. ¿Los gestos táctiles del bisturí fueron intuitivos?</label>
+      <div class="star-row" id="sr-gest"><span class="star" onclick="rate('gest',1)">⭐</span><span class="star" onclick="rate('gest',2)">⭐</span><span class="star" onclick="rate('gest',3)">⭐</span><span class="star" onclick="rate('gest',4)">⭐</span><span class="star" onclick="rate('gest',5)">⭐</span></div>
+    </div>
+    <div class="surv-q">
+      <label>3. ¿Qué fase fue más difícil?</label>
+      <div class="surv-opts" id="diff-opts">
+        <div class="surv-opt" onclick="pickOpt(this,'diff')">Craneotomía (apertura del cráneo)</div>
+        <div class="surv-opt" onclick="pickOpt(this,'diff')">Identificación del tumor</div>
+        <div class="surv-opt" onclick="pickOpt(this,'diff')">Extracción con mínima invasión</div>
+        <div class="surv-opt" onclick="pickOpt(this,'diff')">Cierre quirúrgico y sutura</div>
+      </div>
+    </div>
+    <div class="surv-q">
+      <label>4. ¿Usarías esta herramienta en tu formación?</label>
+      <div class="surv-opts" id="use-opts">
+        <div class="surv-opt" onclick="pickOpt(this,'use')">Sí, como complemento al laboratorio</div>
+        <div class="surv-opt" onclick="pickOpt(this,'use')">Sí, como práctica autónoma</div>
+        <div class="surv-opt" onclick="pickOpt(this,'use')">Necesita más realismo primero</div>
+      </div>
+    </div>
+    <button class="met-btn met-btn-primary" onclick="submitSurvey()">Enviar y finalizar ✓</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  NEUROSURGERY STEPS DATA
+// ═══════════════════════════════════════════════════════
+const STEPS = [
+  {
+    phase:'Preparación',title:'Posicionamiento y marcación',
+    instr:'Usa el bisturí para marcar el área de incisión en la piel de la región temporal derecha. Arrastra el bisturí con el dedo.',
+    layer:'cuero',instr_key:'bisturi',
+    highlight:{x:0.55,y:0.32},
+    procedure:{
+      title:'Selecciona el área de incisión',desc:'¿Dónde realizas la incisión cutánea inicial para acceso temporal derecho?',
+      zones:[
+        {name:'Región temporal',hint:'Acceso parieto-temporal',correct:true,icon:'🎯'},
+        {name:'Línea media',hint:'Acceso frontal',correct:false,icon:'❌'},
+        {name:'Región occipital',hint:'Acceso posterior',correct:false,icon:'❌'},
+        {name:'Fosa posterior',hint:'Área cerebelosa',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Craneotomía',title:'Incisión del cuero cabelludo',
+    instr:'Realiza la incisión en S itálica con el bisturí. Desliza el dedo siguiendo la trayectoria marcada en el modelo.',
+    layer:'cuero',instr_key:'bisturi',
+    highlight:{x:0.55,y:0.30},
+    procedure:{
+      title:'Tipo de incisión',desc:'Selecciona la técnica de incisión correcta para acceso temporal',
+      zones:[
+        {name:'Incisión en S',hint:'Curvilínea, mínima tensión',correct:true,icon:'🎯'},
+        {name:'Incisión recta',hint:'Mayor riesgo de desgarro',correct:false,icon:'❌'},
+        {name:'Incisión en T',hint:'Para fosa posterior',correct:false,icon:'❌'},
+        {name:'Incisión circular',hint:'Craneotomía pequeña',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Craneotomía',title:'Fresado del cráneo',
+    instr:'Activa la fresa craneal y realiza los orificios guía (burr holes) en las esquinas del colgajo óseo. Toca los puntos iluminados.',
+    layer:'craneo',instr_key:'fresa',
+    highlight:{x:0.5,y:0.28},
+    procedure:{
+      title:'Número de burr holes',desc:'¿Cuántos orificios guía necesitas para un colgajo temporal estándar?',
+      zones:[
+        {name:'4 orificios',hint:'Estándar temporal',correct:true,icon:'🎯'},
+        {name:'2 orificios',hint:'Insuficiente cobertura',correct:false,icon:'❌'},
+        {name:'1 orificio',hint:'Solo para trépano',correct:false,icon:'❌'},
+        {name:'6 orificios',hint:'Excesivo para esta zona',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Craneotomía',title:'Elevación del colgajo óseo',
+    instr:'Usa el separador para elevar el colgajo craneal. Mantén presionado y arrastra hacia arriba para exponer la duramadre.',
+    layer:'craneo',instr_key:'bisturi',
+    highlight:{x:0.5,y:0.25},
+    procedure:{
+      title:'Estructura expuesta',desc:'Al levantar el colgajo, ¿qué estructura encuentras inmediatamente?',
+      zones:[
+        {name:'Duramadre',hint:'Membrana protectora',correct:true,icon:'🎯'},
+        {name:'Corteza cerebral',hint:'Bajo la duramadre',correct:false,icon:'❌'},
+        {name:'LCR',hint:'En el espacio subaracnoideo',correct:false,icon:'❌'},
+        {name:'Meninges blandas',hint:'Debajo de la dura',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Apertura dural',title:'Incisión de duramadre',
+    instr:'Incide la duramadre en forma de C con base hacia el seno sagital. El bisturí debe seguir la curvatura del modelo.',
+    layer:'dura',instr_key:'bisturi',
+    highlight:{x:0.5,y:0.26},
+    procedure:{
+      title:'Dirección de apertura dural',desc:'¿Hacia qué estructura orienatas la base del colgajo dural?',
+      zones:[
+        {name:'Seno sagital sup.',hint:'Preserva drenaje venoso',correct:true,icon:'🎯'},
+        {name:'Libre (sin base)',hint:'Riesgo de laceración',correct:false,icon:'❌'},
+        {name:'Seno transverso',hint:'Para fosa posterior',correct:false,icon:'❌'},
+        {name:'Arteria meníngea',hint:'Riesgo hemorrágico alto',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Localización',title:'Identificación del tumor',
+    instr:'Activa la capa TUMOR. Usa el aspirador para explorar suavemente la corteza. El tumor aparece como zona hiperintensa violácea.',
+    layer:'tumor',instr_key:'aspirador',
+    highlight:{x:0.48,y:0.38},
+    procedure:{
+      title:'Tipo de tumor identificado',desc:'Por su aspecto intraoperatorio, ¿cómo clasificas esta lesión?',
+      zones:[
+        {name:'Glioblastoma',hint:'GBM, alta vascularidad',correct:true,icon:'🎯'},
+        {name:'Meningioma',hint:'Extra-axial, capsulado',correct:false,icon:'❌'},
+        {name:'Metástasis',hint:'Bordes bien definidos',correct:false,icon:'❌'},
+        {name:'Absceso cerebral',hint:'Contenido purulento',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Resección',title:'Extirpación del tumor',
+    instr:'Combina aspirador ultrasónico y coagulador bipolar. Traza el perímetro del tumor con el dedo. Reseca en bloques desde la periferia.',
+    layer:'tumor',instr_key:'aspirador',
+    highlight:{x:0.48,y:0.38},
+    procedure:{
+      title:'Técnica de resección',desc:'Para un GBM temporal, ¿qué técnica maximiza la resección segura?',
+      zones:[
+        {name:'Resección funcional',hint:'Mapeo cortical en vivo',correct:true,icon:'🎯'},
+        {name:'Resección en bloque',hint:'Solo lesiones pequeñas',correct:false,icon:'❌'},
+        {name:'Biopsia estereotáxica',hint:'No resección completa',correct:false,icon:'❌'},
+        {name:'Craneotomía despierto',hint:'Correcto pero diferente a resección funcional',correct:false,icon:'❌'}
+      ]
+    }
+  },
+  {
+    phase:'Cierre',title:'Cierre quirúrgico',
+    instr:'Realiza hemostasia con coagulador. Cierra la duramadre con sutura continua. Reposiciona el colgajo óseo y sutura el cuero cabelludo.',
+    layer:'cuero',instr_key:'sutura',
+    highlight:{x:0.5,y:0.32},
+    procedure:{
+      title:'Cierre dural',desc:'¿Qué sutura usas para el cierre hermético de la duramadre?',
+      zones:[
+        {name:'Sutura continua 4-0',hint:'Hermética, sin tensión',correct:true,icon:'🎯'},
+        {name:'Puntos simples 2-0',hint:'Riesgo de fístula LCR',correct:false,icon:'❌'},
+        {name:'Grapas cutáneas',hint:'Solo para piel',correct:false,icon:'❌'},
+        {name:'Parche de duramadre',hint:'Para defectos grandes',correct:false,icon:'❌'}
+      ]
+    }
+  }
+];
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+const S = {
+  step:0, layer:'cuero', instr:'bisturi',
+  errors:0, stepTimes:[], stepStart:0, sessionStart:0,
+  arReady:false, animId:null, timerInterval:null,
+  audioEnabled:true, surveyData:{},
+  incisionPoints:[], rotY:0, rotX:0.2, scale:1,
+  tumorResected:0, // 0-100%
+  lastTouch:null, pinchDist:null,
+  bisturiX:0, bisturiY:0, draggingBisturi:false
+};
+
+// ═══════════════════════════════════════════════════════
+//  CANVAS 3D RENDERER (Three.js-like using Canvas 2D)
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('glcanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resizeCanvas(){
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+let t = 0;
+
+// Layer colors
+const LAYER_COLORS = {
+  cuero:  {fill:'#C4956A', stroke:'#8B5E3C', alt:'#D4A574'},
+  craneo: {fill:'#E0D8BC', stroke:'#A89860', alt:'#EEE8CC'},
+  dura:   {fill:'#F5C6A0', stroke:'#CC8855', alt:'#FFDDBB'},
+  cerebro:{fill:'#E8A0A0', stroke:'#B05050', alt:'#F0B8B8'},
+  tumor:  {fill:'#8B4FC8', stroke:'#5A1A99', alt:'#AA6EE8'}
+};
+
+function project3D(x, y, z, cx, cy, fov=600){
+  // Simple perspective projection
+  const cosY = Math.cos(S.rotY), sinY = Math.sin(S.rotY);
+  const cosX = Math.cos(S.rotX), sinX = Math.sin(S.rotX);
+  // Rotate around Y
+  const x1 = x * cosY - z * sinY;
+  const z1 = x * sinY + z * cosY;
+  // Rotate around X
+  const y1 = y * cosX - z1 * sinX;
+  const z2 = y * sinX + z1 * cosX;
+  const scale = fov / (fov + z2 + 200);
+  return {
+    px: cx + x1 * scale * S.scale,
+    py: cy + y1 * scale * S.scale,
+    z: z2, scale
+  };
+}
+
+// Brain geometry data (vertices of a brain-like shape)
+function drawBrain(cx, cy) {
+  ctx.save();
+  
+  const lc = LAYER_COLORS[S.layer];
+  const layerIdx = ['cuero','craneo','dura','cerebro','tumor'].indexOf(S.layer);
+  
+  // Draw layers from outermost to innermost based on current selection
+  const layersToShow = ['cuero','craneo','dura','cerebro'];
+  const cutoffIdx = layerIdx;
+  
+  // Shadow / ambient
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 30;
+  
+  // Outer brain silhouette
+  for(let li = 0; li <= Math.min(cutoffIdx, 3); li++){
+    const lname = layersToShow[li];
+    const lc2 = LAYER_COLORS[lname];
+    const shrink = li * 0.08;
+    const alpha = li === cutoffIdx ? 1 : 0.35 + li * 0.15;
+    
+    ctx.globalAlpha = alpha;
+    drawBrainShape(cx, cy, lc2.fill, lc2.stroke, 1 - shrink);
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  
+  // Tumor (always visible if layer is tumor or cerebro)
+  if(S.layer === 'tumor' || S.layer === 'cerebro'){
+    drawTumor(cx, cy);
+  }
+  
+  // Convolutions on cerebro layer
+  if(S.layer === 'cerebro' || S.layer === 'tumor'){
+    drawGyrifications(cx, cy);
+  }
+  
+  // Incision marks
+  if(S.incisionPoints.length > 1){
+    ctx.beginPath();
+    ctx.strokeStyle = '#FF6633';
+    ctx.lineWidth = 2.5 * S.scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const first = S.incisionPoints[0];
+    ctx.moveTo(first.x, first.y);
+    S.incisionPoints.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  }
+  
+  // Step highlight dot
+  const step = STEPS[S.step];
+  if(step && step.highlight && S.arReady){
+    const hx = cx + (step.highlight.x - 0.5) * 180 * S.scale;
+    const hy = cy + (step.highlight.y - 0.5) * 200 * S.scale;
+    const pulse = Math.sin(t * 4) * 0.5 + 0.5;
+    
+    // Arrow pointing to highlight
+    ctx.save();
+    ctx.globalAlpha = 0.8 + pulse * 0.2;
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(hx, hy, (22 + pulse * 8) * S.scale, 0, Math.PI * 2);
+    ctx.strokeStyle = '#FFAA00';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Inner dot
+    ctx.beginPath();
+    ctx.arc(hx, hy, 8 * S.scale, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,170,0,${0.7 + pulse * 0.3})`;
+    ctx.fill();
+    ctx.restore();
+  }
+  
+  ctx.restore();
+}
+
+function drawBrainShape(cx, cy, fill, stroke, sz){
+  const r = 90 * sz * S.scale;
+  ctx.beginPath();
+  
+  // Brain silhouette using bezier curves
+  ctx.moveTo(cx, cy - r * 0.95);
+  // Left hemisphere top
+  ctx.bezierCurveTo(cx - r*0.5, cy - r*1.1, cx - r*1.15, cy - r*0.5, cx - r*1.1, cy);
+  // Left bottom
+  ctx.bezierCurveTo(cx - r*1.05, cy + r*0.55, cx - r*0.5, cy + r*0.7, cx - r*0.15, cy + r*0.65);
+  // Brain stem
+  ctx.bezierCurveTo(cx - r*0.08, cy + r*0.72, cx + r*0.08, cy + r*0.72, cx + r*0.15, cy + r*0.65);
+  // Right bottom
+  ctx.bezierCurveTo(cx + r*0.5, cy + r*0.7, cx + r*1.05, cy + r*0.55, cx + r*1.1, cy);
+  // Right hemisphere top
+  ctx.bezierCurveTo(cx + r*1.15, cy - r*0.5, cx + r*0.5, cy - r*1.1, cx, cy - r*0.95);
+  ctx.closePath();
+  
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.5 * S.scale;
+  ctx.stroke();
+  
+  // Interhemispheric fissure
+  if(sz > 0.85){
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r * 0.9);
+    ctx.bezierCurveTo(cx + r*0.05, cy - r*0.4, cx - r*0.05, cy + r*0.1, cx, cy + r*0.4);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = sz > 0.92 ? 2.5 * S.scale : 1 * S.scale;
+    ctx.stroke();
+  }
+}
+
+function drawGyrifications(cx, cy){
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  const gyri = [
+    // Left hemisphere gyri
+    {x:-0.7, y:-0.3, rx:0.35, ry:0.12, a:-0.3},
+    {x:-0.6, y:0.1, rx:0.3, ry:0.1, a:0.2},
+    {x:-0.55, y:-0.55, rx:0.28, ry:0.1, a:-0.5},
+    {x:-0.35, y:0.35, rx:0.25, ry:0.08, a:0.1},
+    // Right hemisphere gyri
+    {x:0.7, y:-0.3, rx:0.35, ry:0.12, a:0.3},
+    {x:0.6, y:0.1, rx:0.3, ry:0.1, a:-0.2},
+    {x:0.55, y:-0.55, rx:0.28, ry:0.1, a:0.5},
+    {x:0.35, y:0.35, rx:0.25, ry:0.08, a:-0.1},
+  ];
+  const r = 90 * S.scale;
+  gyri.forEach(g => {
+    ctx.save();
+    ctx.translate(cx + g.x * r, cy + g.y * r);
+    ctx.rotate(g.a + S.rotY * 0.5);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, g.rx * r, g.ry * r, 0, 0, Math.PI*2);
+    ctx.strokeStyle = '#B05050';
+    ctx.lineWidth = 1.5 * S.scale;
+    ctx.stroke();
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+function drawTumor(cx, cy){
+  const r = 90 * S.scale;
+  const tx = cx + 0.1 * r;
+  const ty = cy + 0.2 * r;
+  const pr = (15 + S.tumorResected * -0.12) * S.scale;
+  
+  if(pr < 2) return;
+  
+  // Glow
+  const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, pr * 2.5);
+  g.addColorStop(0, 'rgba(139,79,200,0.6)');
+  g.addColorStop(1, 'rgba(139,79,200,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(tx, ty, pr * 2.5, 0, Math.PI*2);
+  ctx.fill();
+  
+  // Tumor mass (irregular)
+  ctx.save();
+  ctx.translate(tx, ty);
+  const pct = (1 - S.tumorResected/100);
+  ctx.scale(pct, pct);
+  ctx.beginPath();
+  for(let i=0; i<12; i++){
+    const angle = (i/12) * Math.PI*2;
+    const noise = 0.75 + Math.sin(i*2.3+t*0.5)*0.25;
+    const rx = Math.cos(angle) * pr * noise;
+    const ry = Math.sin(angle) * pr * noise;
+    i===0 ? ctx.moveTo(rx,ry) : ctx.lineTo(rx,ry);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#8B4FC8';
+  ctx.fill();
+  ctx.strokeStyle = '#AA6EE8';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  
+  // Tumor vessels
+  ctx.strokeStyle = 'rgba(200,80,80,0.6)';
+  ctx.lineWidth = 1;
+  [0,1,2].forEach(i => {
+    const a = (i/3)*Math.PI*2 + t*0.2;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a)*pr*2, Math.sin(a)*pr*2);
+    ctx.stroke();
+  });
+  ctx.restore();
+  
+  // Percentage label if resecting
+  if(S.tumorResected > 5){
+    ctx.fillStyle = '#AA6EE8';
+    ctx.font = `bold ${10*S.scale}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(S.tumorResected)}% resecado`, tx, ty - pr * 2.2);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawARGrid(cx, cy){
+  // AR ground grid effect
+  ctx.save();
+  ctx.globalAlpha = 0.08;
+  ctx.strokeStyle = '#00D4FF';
+  ctx.lineWidth = 0.5;
+  const gridW = W * 0.8, gridH = H * 0.3;
+  const gx = cx - gridW/2, gy = H * 0.68;
+  const cols = 12, rows = 6;
+  for(let i=0;i<=cols;i++){
+    ctx.beginPath();
+    const x = gx + (gridW/cols)*i;
+    ctx.moveTo(x, gy);
+    ctx.lineTo(cx + (x-cx)*0.1, gy + gridH);
+    ctx.stroke();
+  }
+  for(let j=0;j<=rows;j++){
+    const pct = j/rows;
+    ctx.beginPath();
+    ctx.moveTo(gx + (cx-gx)*pct*0.9, gy + gridH*pct);
+    ctx.lineTo(gx + gridW - (cx-gx)*pct*0.9, gy + gridH*pct);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawScanEffect(){
+  // Scanning animation before AR is ready
+  ctx.save();
+  const scanAlpha = Math.sin(t * 2) * 0.3 + 0.4;
+  const scanY = (t * 80) % H;
+  const grad = ctx.createLinearGradient(0, scanY - 40, 0, scanY + 40);
+  grad.addColorStop(0, 'rgba(0,212,255,0)');
+  grad.addColorStop(0.5, `rgba(0,212,255,${scanAlpha * 0.15})`);
+  grad.addColorStop(1, 'rgba(0,212,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, scanY - 40, W, 80);
+  ctx.restore();
+}
+
+function render(){
+  S.animId = requestAnimationFrame(render);
+  t += 0.016;
+  
+  ctx.clearRect(0, 0, W, H);
+  
+  const cx = W * 0.5;
+  const cy = H * 0.38;
+  
+  if(!S.arReady){
+    drawScanEffect();
+    t; return;
+  }
+  
+  // AR grid
+  drawARGrid(cx, cy);
+  
+  // Main brain model
+  drawBrain(cx, cy);
+  
+  // Instrument cursor follow
+  if(S.draggingBisturi && S.instr === 'coagulador'){
+    // Coagulator effect
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    const g = ctx.createRadialGradient(S.bisturiX, S.bisturiY, 0, S.bisturiX, S.bisturiY, 25);
+    g.addColorStop(0, 'rgba(255,200,50,0.8)');
+    g.addColorStop(1, 'rgba(255,100,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(S.bisturiX, S.bisturiY, 25, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+  
+  if(S.draggingBisturi && S.instr === 'aspirador'){
+    // Aspiration effect
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    for(let i=0;i<6;i++){
+      const a = (i/6)*Math.PI*2 + t*3;
+      const r = 15 + i*4;
+      ctx.beginPath();
+      ctx.arc(S.bisturiX + Math.cos(a)*r*0.3, S.bisturiY + Math.sin(a)*r*0.3, 3, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(180,130,220,${0.6 - i*0.08})`;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SPLASH BRAIN ANIMATION
+// ═══════════════════════════════════════════════════════
+const splashCanvas = document.getElementById('splash-canvas');
+const sctx = splashCanvas.getContext('2d');
+let st = 0;
+function renderSplash(){
+  requestAnimationFrame(renderSplash);
+  st += 0.018;
+  sctx.clearRect(0,0,260,260);
+  const cx=130,cy=120;
+  
+  // Glow
+  const g = sctx.createRadialGradient(cx,cy,10,cx,cy,100);
+  g.addColorStop(0,'rgba(0,150,255,0.12)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  sctx.fillStyle=g;
+  sctx.fillRect(0,0,260,260);
+  
+  // Draw simplified brain
+  const layers2 = [
+    {fill:'rgba(196,149,106,0.25)',stroke:'rgba(139,94,60,0.3)',sz:1},
+    {fill:'rgba(224,216,188,0.3)',stroke:'rgba(168,152,96,0.3)',sz:0.9},
+    {fill:'rgba(245,198,160,0.3)',stroke:'rgba(204,136,85,0.3)',sz:0.82},
+    {fill:'rgba(232,160,160,0.6)',stroke:'rgba(176,80,80,0.5)',sz:0.75},
+  ];
+  
+  sctx.save();
+  sctx.translate(cx,cy);
+  sctx.rotate(Math.sin(st*0.5)*0.06);
+  sctx.translate(-cx,-cy);
+  
+  layers2.forEach(l => {
+    const r = 75 * l.sz;
+    sctx.beginPath();
+    sctx.moveTo(cx, cy - r*0.95);
+    sctx.bezierCurveTo(cx-r*0.5,cy-r*1.1,cx-r*1.15,cy-r*0.5,cx-r*1.1,cy);
+    sctx.bezierCurveTo(cx-r*1.05,cy+r*0.55,cx-r*0.5,cy+r*0.7,cx-r*0.15,cy+r*0.65);
+    sctx.bezierCurveTo(cx-r*0.08,cy+r*0.72,cx+r*0.08,cy+r*0.72,cx+r*0.15,cy+r*0.65);
+    sctx.bezierCurveTo(cx+r*0.5,cy+r*0.7,cx+r*1.05,cy+r*0.55,cx+r*1.1,cy);
+    sctx.bezierCurveTo(cx+r*1.15,cy-r*0.5,cx+r*0.5,cy-r*1.1,cx,cy-r*0.95);
+    sctx.closePath();
+    sctx.fillStyle=l.fill; sctx.fill();
+    sctx.strokeStyle=l.stroke; sctx.lineWidth=1; sctx.stroke();
+  });
+  
+  // Tumor pulse
+  const tp = Math.sin(st*3)*0.5+0.5;
+  sctx.globalAlpha = 0.5 + tp*0.3;
+  sctx.beginPath();
+  sctx.arc(cx+10,cy+14,10+tp*4,0,Math.PI*2);
+  sctx.fillStyle='#8B4FC8';
+  sctx.fill();
+  sctx.globalAlpha=1;
+  
+  // Fissure
+  sctx.beginPath();
+  sctx.moveTo(cx,cy-68);
+  sctx.bezierCurveTo(cx+4,cy-30,cx-4,cy+8,cx,cy+30);
+  sctx.strokeStyle='rgba(176,80,80,0.4)';
+  sctx.lineWidth=2;
+  sctx.stroke();
+  
+  sctx.restore();
+  
+  // Neural network dots
+  const nodes = [[cx-50,cy-30],[cx+50,cy-40],[cx-30,cy+20],[cx+40,cy+15],[cx,cy-60],[cx+20,cy-10]];
+  sctx.globalAlpha=0.2+Math.sin(st)*0.1;
+  nodes.forEach((n,i)=>{
+    const n2 = nodes[(i+2)%nodes.length];
+    sctx.beginPath();
+    sctx.moveTo(n[0],n[1]); sctx.lineTo(n2[0],n2[1]);
+    sctx.strokeStyle='#00D4FF'; sctx.lineWidth=0.5; sctx.stroke();
+    sctx.beginPath();
+    sctx.arc(n[0],n[1],2,0,Math.PI*2);
+    sctx.fillStyle='#00D4FF'; sctx.fill();
+  });
+  sctx.globalAlpha=1;
+}
+renderSplash();
+
+// ═══════════════════════════════════════════════════════
+//  TOUCH / GESTURE HANDLING
+// ═══════════════════════════════════════════════════════
+function setupGestures(){
+  const el = canvas;
+  const bisturiEl = document.getElementById('bisturi-cursor');
+  
+  el.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if(e.touches.length === 1){
+      const touch = e.touches[0];
+      S.lastTouch = {x:touch.clientX, y:touch.clientY};
+      S.draggingBisturi = true;
+      S.bisturiX = touch.clientX;
+      S.bisturiY = touch.clientY;
+      
+      bisturiEl.style.display = 'block';
+      bisturiEl.style.left = touch.clientX + 'px';
+      bisturiEl.style.top = touch.clientY + 'px';
+      bisturiEl.textContent = instrIcon(S.instr);
+      
+      // Show gesture cursor
+      const gc = document.getElementById('gesture-cursor');
+      gc.classList.add('active');
+      gc.style.left = touch.clientX + 'px';
+      gc.style.top = touch.clientY + 'px';
+      
+      // Record incision point
+      if(S.instr === 'bisturi' && S.arReady){
+        S.incisionPoints.push({x:touch.clientX, y:touch.clientY});
+        if(S.incisionPoints.length > 60) S.incisionPoints.shift();
+      }
+      
+      // Tumor aspiration
+      if(S.instr === 'aspirador' && S.layer === 'tumor'){
+        const cx = W*0.5 + 0.1*90*S.scale;
+        const cy = H*0.38 + 0.2*90*S.scale;
+        const dist = Math.hypot(touch.clientX - cx, touch.clientY - cy);
+        if(dist < 60){
+          S.tumorResected = Math.min(100, S.tumorResected + 5);
+          if(S.tumorResected >= 100) showToast('✓ Tumor extirpado completamente');
+        }
+      }
+      
+    } else if(e.touches.length === 2){
+      S.draggingBisturi = false;
+      bisturiEl.style.display = 'none';
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      S.pinchDist = Math.hypot(dx, dy);
+    }
+  }, {passive:false});
+  
+  el.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if(e.touches.length === 1 && S.lastTouch){
+      const touch = e.touches[0];
+      const dx = touch.clientX - S.lastTouch.x;
+      const dy = touch.clientY - S.lastTouch.y;
+      
+      if(S.draggingBisturi){
+        // Move instrument
+        S.bisturiX = touch.clientX;
+        S.bisturiY = touch.clientY;
+        bisturiEl.style.left = touch.clientX + 'px';
+        bisturiEl.style.top = touch.clientY + 'px';
+        
+        const gc = document.getElementById('gesture-cursor');
+        gc.style.left = touch.clientX + 'px';
+        gc.style.top = touch.clientY + 'px';
+        
+        if(S.instr === 'bisturi' && S.arReady){
+          S.incisionPoints.push({x:touch.clientX, y:touch.clientY});
+          if(S.incisionPoints.length > 80) S.incisionPoints.shift();
+        }
+        
+        if(S.instr === 'aspirador' && S.layer === 'tumor'){
+          const cx = W*0.5 + 0.1*90*S.scale;
+          const cy = H*0.38 + 0.2*90*S.scale;
+          const dist = Math.hypot(touch.clientX - cx, touch.clientY - cy);
+          if(dist < 70) S.tumorResected = Math.min(100, S.tumorResected + 0.8);
+        }
+        
+      } else {
+        // Rotate model
+        S.rotY += dx * 0.008;
+        S.rotX = Math.max(-0.5, Math.min(0.5, S.rotX + dy * 0.005));
+      }
+      
+      S.lastTouch = {x:touch.clientX, y:touch.clientY};
+      
+    } else if(e.touches.length === 2 && S.pinchDist){
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      S.scale = Math.max(0.5, Math.min(2.5, S.scale * (newDist / S.pinchDist)));
+      S.pinchDist = newDist;
+    }
+  }, {passive:false});
+  
+  el.addEventListener('touchend', e => {
+    S.lastTouch = null;
+    S.pinchDist = null;
+    S.draggingBisturi = false;
+    document.getElementById('bisturi-cursor').style.display = 'none';
+    document.getElementById('gesture-cursor').classList.remove('active');
+    
+    // Decay incision
+    setTimeout(() => { if(!S.draggingBisturi) S.incisionPoints = []; }, 1800);
+  });
+  
+  // Mouse fallback
+  let mouseDown = false, lastM = null;
+  el.addEventListener('mousedown', e => {
+    mouseDown = true; lastM={x:e.clientX,y:e.clientY};
+    S.draggingBisturi = true; S.bisturiX=e.clientX; S.bisturiY=e.clientY;
+    document.getElementById('bisturi-cursor').style.display='block';
+    document.getElementById('bisturi-cursor').style.left=e.clientX+'px';
+    document.getElementById('bisturi-cursor').style.top=e.clientY+'px';
+    document.getElementById('bisturi-cursor').textContent=instrIcon(S.instr);
+  });
+  el.addEventListener('mousemove', e => {
+    if(!mouseDown||!lastM)return;
+    const dx=e.clientX-lastM.x, dy=e.clientY-lastM.y;
+    S.rotY += dx*0.008; S.rotX=Math.max(-0.5,Math.min(0.5,S.rotX+dy*0.005));
+    lastM={x:e.clientX,y:e.clientY};
+    S.bisturiX=e.clientX; S.bisturiY=e.clientY;
+    document.getElementById('bisturi-cursor').style.left=e.clientX+'px';
+    document.getElementById('bisturi-cursor').style.top=e.clientY+'px';
+    if(S.instr==='bisturi') S.incisionPoints.push({x:e.clientX,y:e.clientY});
+  });
+  el.addEventListener('mouseup',()=>{
+    mouseDown=false; S.draggingBisturi=false;
+    document.getElementById('bisturi-cursor').style.display='none';
+    setTimeout(()=>S.incisionPoints=[],1800);
+  });
+  el.addEventListener('wheel',e=>{
+    S.scale=Math.max(0.5,Math.min(2.5,S.scale-e.deltaY*0.001));
+    e.preventDefault();
+  },{passive:false});
+}
+
+function instrIcon(i){
+  return {bisturi:'🔪',fresa:'🌀',aspirador:'💨',coagulador:'⚡',sutura:'🧵'}[i]||'🔪';
+}
+
+// ═══════════════════════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════════════════════
+async function startCamera(){
+  const vid = document.getElementById('videoEl');
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}
+    });
+    vid.srcObject = stream;
+    vid.style.display = 'block';
+    // Draw video to canvas background
+    const vctx = canvas.getContext('2d');
+    function drawVideo(){
+      if(!S.arReady && !vid.paused){
+        // Video is the background, handled via CSS z-index
+      }
+    }
+    showToast('Cámara activa');
+    setTimeout(()=>detectSurface(), 2000);
+  } catch(e){
+    console.warn('Sin cámara:', e);
+    showToast('Modo simulación activado');
+    setTimeout(()=>detectSurface(), 1500);
+  }
+}
+
+function detectSurface(){
+  document.getElementById('scan-overlay').style.opacity='0';
+  setTimeout(()=>{
+    document.getElementById('scan-overlay').style.display='none';
+    S.arReady = true;
+    updateStepUI();
+    showToast('Superficie detectada ✓');
+    speakStep();
+  },600);
+}
+
+// ═══════════════════════════════════════════════════════
+//  STEP UI
+// ═══════════════════════════════════════════════════════
+function updateStepUI(){
+  const step = STEPS[S.step];
+  const total = STEPS.length;
+  
+  document.getElementById('phase-name').textContent = step.phase;
+  document.getElementById('phase-step').textContent = `${step.title}`;
+  document.getElementById('step-title').textContent = step.title;
+  document.getElementById('step-instr').textContent = step.instr;
+  document.getElementById('step-num').textContent = `PASO ${String(S.step+1).padStart(2,'0')}`;
+  
+  // Dots
+  const dotsEl = document.getElementById('step-dots');
+  dotsEl.innerHTML = '';
+  for(let i=0;i<total;i++){
+    const d=document.createElement('div');
+    d.className='sdot'+(i<S.step?' done':i===S.step?' active':'');
+    dotsEl.appendChild(d);
+  }
+  
+  // Layer auto-switch
+  setLayer(step.layer, null, true);
+  
+  // Instrument auto-switch
+  setInstr(step.instr_key||'bisturi', null, true);
+  
+  // Vitals variation by step
+  updateVitals();
+}
+
+function updateVitals(){
+  const stress = S.errors * 3 + S.step;
+  const pulse = 65 + stress * 2 + Math.floor(Math.random()*4);
+  const sat = Math.max(94, 99 - S.errors);
+  const bp1 = 115 + stress * 2, bp2 = 75 + stress;
+  
+  const pEl = document.getElementById('v-pulse');
+  pEl.textContent = pulse;
+  pEl.className = 'vital-val' + (pulse > 90 ? ' warn' : pulse > 105 ? ' danger' : '');
+  
+  const sEl = document.getElementById('v-sat');
+  sEl.textContent = sat + '%';
+  sEl.className = 'vital-val' + (sat < 96 ? ' warn' : sat < 93 ? ' danger' : '');
+  
+  document.getElementById('v-bp').textContent = `${bp1}/${bp2}`;
+}
+
+function updateTimer(){
+  const e = Math.floor((Date.now() - S.sessionStart)/1000);
+  const m=Math.floor(e/60), s=e%60;
+  document.getElementById('v-time').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  STEP NAVIGATION
+// ═══════════════════════════════════════════════════════
+function nextStep(){
+  if(!S.arReady) return;
+  const elapsed = (performance.now() - S.stepStart) / 1000;
+  S.stepTimes.push(Math.round(elapsed*10)/10);
+  
+  if(S.step < STEPS.length - 1){
+    S.step++;
+    S.stepStart = performance.now();
+    S.incisionPoints = [];
+    updateStepUI();
+    speakStep();
+    showToast(`Paso ${S.step+1} de ${STEPS.length}`);
+  } else {
+    showMetrics();
+  }
+}
+
+function prevStep(){
+  if(S.step > 0){
+    S.step--;
+    S.incisionPoints=[];
+    updateStepUI();
+    showToast('◀ Paso anterior');
+  }
+}
+
+function setLayer(name, el, silent){
+  S.layer = name;
+  document.querySelectorAll('.layer-btn').forEach(b=>b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  else {
+    const btns = document.querySelectorAll('.layer-btn');
+    const names=['cuero','craneo','dura','cerebro','tumor'];
+    const idx=names.indexOf(name);
+    if(btns[idx]) btns[idx].classList.add('active');
+  }
+  if(!silent) showToast('Capa: '+name.toUpperCase());
+}
+
+function setInstr(name, el, silent){
+  S.instr = name;
+  document.querySelectorAll('.instr-btn').forEach(b=>b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  else document.getElementById('i-'+name)?.classList.add('active');
+  if(!silent) showToast('Instrumento: '+instrIcon(name)+' '+name);
+}
+
+// ═══════════════════════════════════════════════════════
+//  PROCEDURE ZONES
+// ═══════════════════════════════════════════════════════
+function showProcedure(){
+  const proc = STEPS[S.step].procedure;
+  document.getElementById('proc-tag').textContent = STEPS[S.step].phase;
+  document.getElementById('proc-title').textContent = proc.title;
+  document.getElementById('proc-desc').textContent = proc.desc;
+  
+  const zonesEl = document.getElementById('proc-zones');
+  zonesEl.innerHTML='';
+  proc.zones.forEach(z=>{
+    const d=document.createElement('div');
+    d.className='pzone';
+    d.innerHTML=`<span class="pzone-icon">${z.icon}</span><span class="pzone-name">${z.name}</span><span class="pzone-hint">${z.hint}</span>`;
+    d.onclick=()=>handleZone(d,z);
+    zonesEl.appendChild(d);
+  });
+  document.getElementById('proc-overlay').style.display='flex';
+}
+
+function handleZone(el, z){
+  if(z.correct){
+    el.classList.add('correct');
+    showToast('✓ Correcto!');
+    haptic(100);
+    setTimeout(()=>{ closeProcedure(); nextStep(); }, 900);
+  } else {
+    el.classList.add('wrong');
+    S.errors++;
+    updateVitals();
+    showToast('✗ Incorrecto — revisa la anatomía', true);
+    haptic(200);
+    setTimeout(()=>el.classList.remove('wrong'), 500);
+  }
+}
+
+function closeProcedure(){
+  document.getElementById('proc-overlay').style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════
+//  AUDIO
+// ═══════════════════════════════════════════════════════
+let audioEnabled = true;
+function toggleAudio(){
+  audioEnabled = !audioEnabled;
+  document.getElementById('audio-btn').textContent = audioEnabled ? '🔊' : '🔇';
+  showToast(audioEnabled ? 'Audio activado' : 'Audio silenciado');
+}
+
+function speakStep(){
+  if(!audioEnabled || !window.speechSynthesis) return;
+  const step = STEPS[S.step];
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(step.title + '. ' + step.instr);
+  u.lang='es-MX'; u.rate=0.9; u.pitch=1;
+  // Try to get a Spanish voice
+  const voices = speechSynthesis.getVoices();
+  const esVoice = voices.find(v=>v.lang.startsWith('es'));
+  if(esVoice) u.voice=esVoice;
+  speechSynthesis.speak(u);
+}
+
+function haptic(ms){
+  if(navigator.vibrate) navigator.vibrate(ms);
+}
+
+// ═══════════════════════════════════════════════════════
+//  METRICS
+// ═══════════════════════════════════════════════════════
+function showMetrics(){
+  window.speechSynthesis?.cancel();
+  clearInterval(S.timerInterval);
+  
+  const totalSecs = Math.round((Date.now()-S.sessionStart)/1000);
+  const done = S.stepTimes.length;
+  const acc = Math.max(0,Math.round(done/(done+S.errors)*100));
+  const score = Math.round(acc*0.55 + Math.min(100,(300/Math.max(1,totalSecs))*45));
+  
+  document.getElementById('score-num').textContent = score;
+  document.getElementById('score-num').style.color = score>80?'#00FF88':score>60?'#FFAA00':'#FF3366';
+  document.getElementById('m-time').textContent = `${Math.floor(totalSecs/60)}m ${totalSecs%60}s`;
+  document.getElementById('m-errors').textContent = S.errors;
+  document.getElementById('m-acc').textContent = acc+'%';
+  document.getElementById('m-steps').textContent = `${done}/${STEPS.length}`;
+  
+  const maxT = Math.max(...S.stepTimes,1);
+  document.getElementById('time-bars').innerHTML = S.stepTimes.map((t2,i)=>`
+    <div class="time-row">
+      <div class="time-row-name">${STEPS[i]?.title.slice(0,16)||'Paso '+(i+1)}</div>
+      <div class="time-bar"><div class="time-fill" style="width:${(t2/maxT*100).toFixed(0)}%"></div></div>
+      <div class="time-val">${t2.toFixed(1)}s</div>
+    </div>
+  `).join('');
+  
+  // Persist
+  const rec={module:'neuro',score,acc,errors:S.errors,totalSecs,date:new Date().toISOString()};
+  try{
+    const h=JSON.parse(localStorage.getItem('neuroAR')||'[]');
+    h.push(rec);localStorage.setItem('neuroAR',JSON.stringify(h.slice(-50)));
+  }catch(e){}
+  
+  document.getElementById('metrics-overlay').style.display='flex';
+}
+
+function openSurvey(){
+  document.getElementById('metrics-overlay').style.display='none';
+  document.getElementById('survey-overlay').style.display='flex';
+}
+
+// ═══════════════════════════════════════════════════════
+//  SURVEY
+// ═══════════════════════════════════════════════════════
+function rate(cat, val){
+  S.surveyData[cat]=val;
+  document.querySelectorAll(`#sr-${cat} .star`).forEach((s,i)=>s.classList.toggle('lit',i<val));
+}
+
+function pickOpt(el, grp){
+  const parent = el.parentElement;
+  parent.querySelectorAll('.surv-opt').forEach(o=>o.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function submitSurvey(){
+  const data={
+    realismo:S.surveyData.real||0,
+    gestos:S.surveyData.gest||0,
+    dificultad:document.querySelector('#diff-opts .sel')?.textContent||'—',
+    usaria:document.querySelector('#use-opts .sel')?.textContent||'—',
+    date:new Date().toISOString()
+  };
+  try{
+    const s=JSON.parse(localStorage.getItem('neuroAR_surveys')||'[]');
+    s.push(data);localStorage.setItem('neuroAR_surveys',JSON.stringify(s));
+  }catch(e){}
+  showToast('¡Gracias por tu evaluación! 🙏');
+  setTimeout(()=>{ document.getElementById('survey-overlay').style.display='none'; restartSim(); },1600);
+}
+
+// ═══════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════
+function startApp(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('app').style.display='flex';
+  
+  S.sessionStart = Date.now();
+  S.stepStart = performance.now();
+  S.timerInterval = setInterval(updateTimer, 1000);
+  
+  setupGestures();
+  render();
+  startCamera();
+  
+  // Build step dots
+  updateStepUI();
+}
+
+function goBack(){
+  if(S.animId) cancelAnimationFrame(S.animId);
+  clearInterval(S.timerInterval);
+  window.speechSynthesis?.cancel();
+  document.getElementById('app').style.display='none';
+  document.getElementById('splash').style.display='flex';
+  document.getElementById('metrics-overlay').style.display='none';
+  document.getElementById('survey-overlay').style.display='none';
+  document.getElementById('scan-overlay').style.display='flex';
+  document.getElementById('scan-overlay').style.opacity='1';
+  S.arReady=false; S.step=0; S.errors=0; S.stepTimes=[];
+  S.incisionPoints=[]; S.tumorResected=0; S.rotY=0; S.rotX=0.2;
+}
+
+function restartSim(){
+  document.getElementById('metrics-overlay').style.display='none';
+  document.getElementById('survey-overlay').style.display='none';
+  S.step=0; S.errors=0; S.stepTimes=[]; S.incisionPoints=[];
+  S.tumorResected=0; S.sessionStart=Date.now(); S.stepStart=performance.now();
+  clearInterval(S.timerInterval);
+  S.timerInterval=setInterval(updateTimer,1000);
+  updateStepUI();
+  showToast('Simulación reiniciada');
+}
+
+function toggleAudio(){ audioEnabled=!audioEnabled; document.getElementById('audio-btn').textContent=audioEnabled?'🔊':'🔇'; }
+
+function showToast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className=err?'show err':'show';
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.className='',2500);
+}
+
+// Preload voices
+if(window.speechSynthesis) speechSynthesis.onvoiceschanged=()=>{};
+</script>
+</body>
+</html>
