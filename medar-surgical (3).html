@@ -1,0 +1,2061 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>MedAR Surgical</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --ink:#050e1c;--panel:#091626;--panel2:#0d1f35;--panel3:#122440;
+  --cyan:#00d4ff;--green:#00ff99;--red:#ff3355;--amber:#ffaa00;--purple:#9966ff;
+  --text:#cce4ff;--dim:#4a7a99;--border:rgba(0,212,255,.14);
+  --r:10px;--r2:14px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
+html,body{width:100%;height:100dvh;overflow:hidden;background:var(--ink);color:var(--text);
+  font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;touch-action:none;}
+canvas{position:fixed;top:0;left:0;width:100%!important;height:100%!important;display:block;}
+
+/* ===================== START SCREEN ===================== */
+#start{
+  position:fixed;inset:0;z-index:300;background:var(--ink);
+  display:flex;flex-direction:column;align-items:center;
+  padding:max(env(safe-area-inset-top),20px) 18px 20px;
+  overflow-y:auto;transition:opacity .3s ease;
+}
+.wordmark{
+  margin:18px 0 4px;font-size:2.4rem;font-weight:900;letter-spacing:-2px;
+  background:linear-gradient(130deg,var(--cyan),var(--green));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.wordmark-sub{font-size:.65rem;letter-spacing:4px;text-transform:uppercase;color:var(--dim);margin-bottom:18px;}
+
+.section-title{
+  font-size:.62rem;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--dim);margin:14px 0 8px;align-self:flex-start;width:100%;max-width:390px;
+}
+.model-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:100%;max-width:390px;margin-bottom:2px;}
+.mc{
+  background:var(--panel);border:1.5px solid var(--border);border-radius:var(--r);
+  padding:13px 6px 11px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s;
+}
+.mc.sel{border-color:var(--cyan);background:rgba(0,212,255,.07);}
+.mc:active{transform:scale(.96);}
+.mc-ico{
+  width:36px;height:36px;border-radius:8px;margin:0 auto 7px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);
+  font-size:.58rem;font-weight:700;letter-spacing:.5px;color:var(--cyan);
+}
+.mc-name{font-size:.74rem;font-weight:600;color:var(--text);}
+.mc-proc{font-size:.58rem;color:var(--dim);margin-top:2px;}
+.mc.sel .mc-name{color:var(--cyan);}
+
+.infobox{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--r2);
+  padding:13px 14px;width:100%;max-width:390px;
+}
+.infobox p{font-size:.75rem;color:var(--dim);line-height:1.7;}
+.infobox strong{color:var(--text);}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
+.tag{font-size:.6rem;padding:.18rem .5rem;border-radius:20px;
+  background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.18);color:var(--cyan);}
+
+.btn-ar{
+  width:100%;max-width:390px;padding:15px;margin-top:14px;
+  background:linear-gradient(130deg,var(--cyan),var(--green));
+  color:#000;border:none;border-radius:var(--r2);
+  font-size:.95rem;font-weight:800;letter-spacing:.4px;cursor:pointer;transition:opacity .15s;
+}
+.btn-ar:active{opacity:.85;}
+.btn-ar:disabled{opacity:.35;cursor:not-allowed;}
+.btn-demo{
+  width:100%;max-width:390px;padding:12px;margin-top:7px;
+  background:transparent;color:var(--dim);
+  border:1px solid var(--border);border-radius:var(--r2);
+  font-size:.85rem;cursor:pointer;
+}
+.btn-demo:active{background:var(--panel2);}
+.compat{
+  width:100%;max-width:390px;padding:10px 13px;margin-top:10px;
+  background:rgba(255,51,85,.07);border:1px solid rgba(255,51,85,.25);
+  border-radius:var(--r);font-size:.72rem;color:#ff7799;line-height:1.6;display:none;
+}
+
+/* ===================== AR OVERLAY ===================== */
+#overlay{position:fixed;inset:0;z-index:50;display:none;pointer-events:none;}
+#overlay.on{display:block;}
+
+/* Top bar */
+#topbar{
+  position:absolute;top:0;left:0;right:0;pointer-events:auto;
+  padding:max(env(safe-area-inset-top),10px) 12px 12px;
+  background:linear-gradient(180deg,rgba(5,14,28,.92) 0%,transparent 100%);
+  display:flex;align-items:center;gap:8px;
+}
+.tb-model{font-size:.8rem;font-weight:700;color:var(--cyan);letter-spacing:.4px;}
+.tb-proc{font-size:.58rem;color:var(--dim);margin-top:1px;}
+#tb-timer{
+  font-size:.75rem;font-family:monospace;font-weight:600;
+  background:rgba(0,0,0,.55);border:1px solid var(--border);
+  padding:.25rem .6rem;border-radius:6px;color:var(--cyan);margin-left:auto;
+}
+#btn-end{
+  background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.4);
+  color:var(--red);font-size:.65rem;font-weight:600;
+  padding:.28rem .65rem;border-radius:6px;cursor:pointer;pointer-events:auto;
+}
+
+/* Mini metrics */
+#mini-metrics{
+  position:absolute;pointer-events:none;
+  background:rgba(5,14,28,.88);border:1px solid var(--border);
+  border-radius:var(--r);padding:8px 10px;min-width:86px;
+  backdrop-filter:blur(8px);font-size:.62rem;
+}
+.mm-r{display:flex;justify-content:space-between;gap:8px;padding:2px 0;}
+.mm-l{color:var(--dim);}
+.mm-v{color:var(--cyan);font-weight:700;font-family:monospace;}
+.mm-v.bad{color:var(--red);}
+
+/* Demo banner */
+#demo-banner{
+  position:absolute;left:50%;transform:translateX(-50%);
+  background:rgba(255,170,0,.12);border:1px solid rgba(255,170,0,.35);
+  color:var(--amber);font-size:.62rem;padding:.22rem .65rem;
+  border-radius:6px;pointer-events:none;white-space:nowrap;display:none;
+}
+
+/* Scan hint */
+#scan-hint{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  text-align:center;pointer-events:none;
+}
+.sr-outer{
+  width:88px;height:88px;border-radius:50%;border:2px solid var(--cyan);
+  margin:0 auto 12px;position:relative;
+  animation:rPulse 1.8s ease-in-out infinite;
+}
+.sr-inner{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:58px;height:58px;border-radius:50%;
+  border:1px solid rgba(0,212,255,.35);animation:rPulse 1.8s ease-in-out infinite .5s;
+}
+@keyframes rPulse{0%,100%{opacity:.2;transform:scale(.85);}50%{opacity:1;transform:scale(1.1);}}
+.sh-txt{font-size:.78rem;color:var(--dim);line-height:1.6;}
+.sh-arrow{font-size:1.1rem;color:var(--cyan);margin-bottom:5px;animation:arrowBounce .9s ease-in-out infinite;}
+@keyframes arrowBounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);}}
+
+/* Instrument Toolbar */
+#instrument-bar{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:6px;pointer-events:auto;
+}
+.inst-btn{
+  width:48px;height:48px;border-radius:10px;
+  background:rgba(5,14,28,.88);border:1.5px solid var(--border);
+  color:var(--dim);font-size:.52rem;font-weight:700;letter-spacing:.3px;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;transition:all .18s;text-transform:uppercase;
+  line-height:1.1;
+}
+.inst-btn .i-sym{font-size:.8rem;font-weight:900;color:inherit;}
+.inst-btn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,.1);}
+.inst-btn.active.scalpel{border-color:var(--red);color:var(--red);background:rgba(255,51,85,.1);}
+.inst-btn.active.suture{border-color:var(--green);color:var(--green);background:rgba(0,255,153,.08);}
+.inst-btn.active.catheter{border-color:var(--purple);color:var(--purple);background:rgba(153,102,255,.1);}
+.inst-btn.active.forceps{border-color:var(--amber);color:var(--amber);background:rgba(255,170,0,.1);}
+
+/* Layer panel */
+#layer-panel{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:5px;pointer-events:auto;align-items:center;
+}
+.lp-label{
+  font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--dim);background:rgba(5,14,28,.85);border:1px solid var(--border);
+  border-radius:6px;padding:.15rem .4rem;text-align:center;max-width:50px;line-height:1.3;
+}
+.lb{
+  width:44px;height:44px;border-radius:9px;
+  background:rgba(5,14,28,.88);border:1.5px solid var(--border);
+  color:var(--dim);font-size:.55rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.3px;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;transition:all .18s;line-height:1.2;
+}
+.lb span{font-size:.65rem;font-weight:900;}
+.lb.on{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,.08);}
+
+/* Step panel */
+#step-panel{
+  position:absolute;bottom:130px;left:10px;right:10px;
+  background:rgba(5,14,28,.93);border:1px solid var(--border);
+  border-radius:var(--r2);padding:12px 13px;backdrop-filter:blur(10px);
+  pointer-events:none;
+}
+.stp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.stp-n{font-size:.6rem;color:var(--green);text-transform:uppercase;letter-spacing:1.8px;font-weight:700;}
+.stp-prog{display:flex;gap:3px;}
+.stp-dot{height:3px;border-radius:2px;transition:all .3s;}
+.stp-dot.done{background:var(--green);}
+.stp-dot.cur{background:var(--cyan);}
+.stp-dot.todo{background:rgba(255,255,255,.12);}
+.stp-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:4px;line-height:1.3;}
+.stp-desc{font-size:.71rem;color:var(--dim);line-height:1.6;}
+.stp-inst{
+  margin-top:8px;font-size:.65rem;color:var(--amber);
+  background:rgba(255,170,0,.07);border:1px solid rgba(255,170,0,.2);
+  border-radius:6px;padding:5px 8px;line-height:1.5;
+}
+
+/* Control bar */
+#ctrl-bar{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:8px 10px max(env(safe-area-inset-bottom),10px);
+  background:linear-gradient(0deg,rgba(5,14,28,.96) 0%,transparent 100%);
+  display:flex;gap:6px;pointer-events:auto;
+}
+.cb{
+  flex:1;padding:9px 4px;
+  background:rgba(9,22,38,.94);border:1px solid var(--border);
+  border-radius:9px;color:var(--dim);font-size:.58rem;font-weight:600;
+  text-align:center;cursor:pointer;transition:all .18s;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  text-transform:uppercase;letter-spacing:.3px;
+}
+.cb:active{transform:scale(.95);}
+.cb.primary{background:rgba(0,212,255,.1);border-color:var(--cyan);color:var(--cyan);}
+.cb.danger{background:rgba(255,51,85,.08);border-color:rgba(255,51,85,.35);color:var(--red);}
+.cb-sym{font-size:.85rem;font-weight:900;}
+
+/* Instrument status badge */
+#inst-status{
+  position:absolute;top:calc(max(env(safe-area-inset-top),10px) + 54px);left:50%;
+  transform:translateX(-50%);
+  font-size:.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  padding:.22rem .9rem;border-radius:6px;pointer-events:none;
+  transition:all .2s;white-space:nowrap;
+}
+#inst-status.scalpel{background:rgba(255,51,85,.15);border:1px solid rgba(255,51,85,.35);color:var(--red);}
+#inst-status.forceps{background:rgba(255,170,0,.12);border:1px solid rgba(255,170,0,.3);color:var(--amber);}
+#inst-status.suture{background:rgba(0,255,153,.08);border:1px solid rgba(0,255,153,.3);color:var(--green);}
+#inst-status.catheter{background:rgba(153,102,255,.1);border:1px solid rgba(153,102,255,.3);color:var(--purple);}
+
+/* Gesture overlay indicator */
+#gesture-hint{
+  position:absolute;bottom:200px;left:50%;transform:translateX(-50%);
+  font-size:.7rem;color:var(--dim);background:rgba(5,14,28,.8);
+  border:1px solid var(--border);border-radius:8px;padding:.3rem .9rem;
+  pointer-events:none;display:none;text-align:center;line-height:1.5;
+}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:155px;left:50%;transform:translateX(-50%);
+  background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.35);
+  color:var(--cyan);font-size:.75rem;padding:.4rem 1rem;border-radius:8px;
+  z-index:1000;display:none;pointer-events:none;
+  max-width:88vw;text-align:center;backdrop-filter:blur(8px);white-space:nowrap;
+}
+#toast.err{background:rgba(255,51,85,.12);border-color:rgba(255,51,85,.4);color:var(--red);}
+#toast.ok{background:rgba(0,255,153,.08);border-color:rgba(0,255,153,.35);color:var(--green);}
+#toast.info{background:rgba(255,170,0,.1);border-color:rgba(255,170,0,.3);color:var(--amber);}
+
+/* Survey */
+#survey{
+  position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;z-index:400;padding:20px;
+}
+#survey.on{display:flex;}
+.sv-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:16px;padding:20px;width:100%;max-width:360px;
+  max-height:88dvh;overflow-y:auto;
+}
+.sv-title{font-size:1rem;font-weight:700;margin-bottom:3px;}
+.sv-sub{font-size:.72rem;color:var(--dim);margin-bottom:18px;}
+.sv-q{margin-bottom:16px;}
+.sv-q label{font-size:.76rem;color:var(--dim);display:block;margin-bottom:7px;}
+.sv-stars{display:flex;gap:5px;}
+.sv-star{
+  width:44px;height:38px;border-radius:7px;
+  background:var(--panel2);border:1.5px solid var(--border);
+  color:var(--dim);font-size:.82rem;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.sv-star.on{background:rgba(0,212,255,.15);border-color:var(--cyan);color:var(--cyan);}
+.sv-submit{
+  width:100%;padding:13px;background:linear-gradient(130deg,var(--cyan),var(--green));
+  color:#000;font-weight:800;border:none;border-radius:10px;cursor:pointer;
+  font-size:.92rem;margin-top:8px;
+}
+
+/* Results */
+#results{
+  position:fixed;inset:0;background:var(--ink);z-index:500;
+  overflow-y:auto;padding:max(env(safe-area-inset-top),24px) 16px 24px;display:none;
+}
+.rs-head{text-align:center;padding-bottom:14px;}
+.rs-badge{
+  display:inline-block;font-size:.58rem;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--green);border:1px solid rgba(0,255,153,.28);border-radius:20px;
+  padding:.18rem .8rem;margin-bottom:10px;
+}
+.rs-title{font-size:1.5rem;font-weight:900;letter-spacing:-1.2px;
+  background:linear-gradient(130deg,var(--cyan),var(--green));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.rs-sub{font-size:.75rem;color:var(--dim);margin-top:3px;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px;}
+.sc{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center;}
+.sc-n{font-size:2rem;font-weight:900;color:var(--cyan);line-height:1;}
+.sc-l{font-size:.65rem;color:var(--dim);margin-top:4px;}
+.breakdown{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:10px;}
+.bd-h{font-size:.6rem;color:var(--cyan);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;font-weight:700;}
+.bd-r{display:flex;align-items:flex-start;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.bd-r:last-child{border-bottom:none;}
+.bd-n{font-size:.68rem;color:var(--green);margin-right:7px;min-width:18px;font-weight:700;}
+.bd-name{font-size:.72rem;color:var(--dim);flex:1;line-height:1.4;}
+.bd-t{font-size:.68rem;font-family:monospace;color:var(--text);margin-left:6px;white-space:nowrap;}
+.bd-s{font-size:.6rem;padding:.1rem .38rem;border-radius:4px;margin-left:4px;white-space:nowrap;}
+.s-ok{background:rgba(0,255,153,.08);color:var(--green);}
+.s-er{background:rgba(255,51,85,.1);color:var(--red);}
+.score-bar-wrap{margin:6px 0 12px;}
+.sbar-bg{height:9px;background:var(--panel2);border-radius:5px;overflow:hidden;}
+.sbar-fill{height:100%;border-radius:5px;transition:width 1.1s ease;}
+.sbar-pct{font-size:.72rem;color:var(--dim);margin-top:4px;text-align:right;}
+/* Incision summary */
+.incision-summary{
+  background:rgba(255,51,85,.06);border:1px solid rgba(255,51,85,.2);
+  border-radius:var(--r);padding:10px 12px;margin-bottom:10px;
+}
+.is-title{font-size:.6rem;color:var(--red);text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:7px;}
+.is-row{display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0;}
+.is-l{color:var(--dim);}
+.is-v{color:var(--text);font-family:monospace;}
+#btn-restart2{
+  width:100%;padding:14px;background:linear-gradient(130deg,var(--cyan),var(--green));
+  color:#000;font-weight:800;border:none;border-radius:var(--r2);
+  font-size:.92rem;cursor:pointer;margin-bottom:8px;
+}
+.btn-export{
+  width:100%;padding:11px;background:transparent;border:1px solid var(--border);
+  color:var(--dim);border-radius:var(--r2);font-size:.82rem;cursor:pointer;
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== START SCREEN ==================== -->
+<div id="start">
+  <div class="wordmark">MedAR</div>
+  <div class="wordmark-sub">Simulacion Quirurgica en Realidad Aumentada</div>
+
+  <div class="section-title">Modelo anatomico</div>
+  <div class="model-grid" id="model-grid">
+    <div class="mc sel" data-m="arm">
+      <div class="mc-ico">ARM</div>
+      <div class="mc-name">Brazo</div>
+      <div class="mc-proc">Venopuncion IV</div>
+    </div>
+    <div class="mc" data-m="heart">
+      <div class="mc-ico">COR</div>
+      <div class="mc-name">Corazon</div>
+      <div class="mc-proc">Auscultacion</div>
+    </div>
+    <div class="mc" data-m="respiratory">
+      <div class="mc-ico">PUL</div>
+      <div class="mc-name">Pulmones</div>
+      <div class="mc-proc">Eval. pulmonar</div>
+    </div>
+  </div>
+
+  <div class="section-title">Como operar</div>
+  <div class="infobox">
+    <p>
+      <strong>Bisturi:</strong> Arrastra el dedo sobre el modelo para hacer incisiones reales en la geometria. La cuchilla sigue tu gesto exactamente via raycast.<br><br>
+      <strong>Forzeps:</strong> Pinza con dos dedos para separar tejidos en la zona de incision.<br><br>
+      <strong>Sutura:</strong> Toca a lo largo de la incision para colocar puntos de cierre.<br><br>
+      <strong>Cateter:</strong> Toca sobre la vena resaltada para insertar el cateter con animacion.
+    </p>
+    <div class="tags">
+      <span class="tag">WebXR AR Real</span>
+      <span class="tag">Raycast gestual</span>
+      <span class="tag">Incisiones 3D</span>
+      <span class="tag">4 instrumentos</span>
+      <span class="tag">ARCore / ARKit</span>
+      <span class="tag">Metricas completas</span>
+    </div>
+  </div>
+
+  <button class="btn-ar" id="btn-ar">Iniciar AR</button>
+  <button class="btn-demo" id="btn-demo">Modo demostracion (sin camara)</button>
+  <div class="compat" id="compat-msg"></div>
+</div>
+
+<!-- ==================== AR OVERLAY ==================== -->
+<div id="overlay">
+  <div id="demo-banner">MODO DEMO — sin camara AR</div>
+
+  <div id="scan-hint">
+    <div class="sh-arrow">&#8595;</div>
+    <div class="sr-outer"><div class="sr-inner"></div></div>
+    <div class="sh-txt">Mueve el dispositivo lentamente<br>para detectar una superficie plana</div>
+  </div>
+
+  <div id="topbar">
+    <div>
+      <div class="tb-model" id="tb-model-name">Brazo</div>
+      <div class="tb-proc" id="tb-proc-name">Venopuncion IV</div>
+    </div>
+    <div id="tb-timer">00:00</div>
+    <button id="btn-end" onclick="endSession()">Finalizar</button>
+  </div>
+
+  <div id="demo-banner"></div>
+
+  <div id="mini-metrics" style="top:calc(max(env(safe-area-inset-top),10px) + 58px);right:10px;">
+    <div class="mm-r"><span class="mm-l">Pasos</span><span class="mm-v" id="mm-steps">0/0</span></div>
+    <div class="mm-r"><span class="mm-l">Errores</span><span class="mm-v bad" id="mm-errors">0</span></div>
+    <div class="mm-r"><span class="mm-l">Incis.</span><span class="mm-v" id="mm-incisions">0</span></div>
+    <div class="mm-r"><span class="mm-l">Suturas</span><span class="mm-v" id="mm-sutures">0</span></div>
+  </div>
+
+  <div id="inst-status" class="scalpel">BISTURI ACTIVO</div>
+
+  <div id="instrument-bar">
+    <div class="inst-btn scalpel active" data-inst="scalpel" onclick="selectInstrument('scalpel')">
+      <span class="i-sym">/</span><span>Bisturi</span>
+    </div>
+    <div class="inst-btn forceps" data-inst="forceps" onclick="selectInstrument('forceps')">
+      <span class="i-sym">&gt;&lt;</span><span>Forzeps</span>
+    </div>
+    <div class="inst-btn suture" data-inst="suture" onclick="selectInstrument('suture')">
+      <span class="i-sym">&#8761;</span><span>Sutura</span>
+    </div>
+    <div class="inst-btn catheter" data-inst="catheter" onclick="selectInstrument('catheter')">
+      <span class="i-sym">&#9135;</span><span>Cateter</span>
+    </div>
+  </div>
+
+  <div id="layer-panel">
+    <div class="lp-label" id="lp-label">Capa</div>
+    <div class="lb on" id="lb0" onclick="setLayer(0)"><span>&#9679;</span>Piel</div>
+    <div class="lb" id="lb1" onclick="setLayer(1)"><span>&#9679;</span>Vasc.</div>
+    <div class="lb" id="lb2" onclick="setLayer(2)"><span>&#9679;</span>Musc.</div>
+    <div class="lb" id="lb3" onclick="setLayer(3)"><span>&#9679;</span>Hueso</div>
+  </div>
+
+  <div id="gesture-hint">
+    Arrastra para cortar &bull; Suelta para terminar incision
+  </div>
+
+  <div id="step-panel">
+    <div class="stp-top">
+      <div class="stp-n" id="stp-num">Paso 1</div>
+      <div class="stp-prog" id="stp-prog"></div>
+    </div>
+    <div class="stp-title" id="stp-title">-</div>
+    <div class="stp-desc" id="stp-desc">-</div>
+    <div class="stp-inst" id="stp-inst">-</div>
+  </div>
+
+  <div id="ctrl-bar">
+    <div class="cb" onclick="prevStep()"><span class="cb-sym">&#8592;</span>Anterior</div>
+    <div class="cb" onclick="cycleLayer()"><span class="cb-sym">&#9723;</span>Capas</div>
+    <div class="cb primary" onclick="confirmStep()"><span class="cb-sym">&#10003;</span>Confirmar</div>
+    <div class="cb danger" onclick="simError()"><span class="cb-sym">&#215;</span>Error</div>
+    <div class="cb" onclick="nextStep()"><span class="cb-sym">&#8594;</span>Siguiente</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ==================== SURVEY ==================== -->
+<div id="survey">
+  <div class="sv-card">
+    <div class="sv-title">Evaluacion de la Sesion</div>
+    <div class="sv-sub">Califica tu experiencia (1 a 5)</div>
+    <div class="sv-q"><label>Realismo de los instrumentos virtuales</label><div class="sv-stars" id="sq-instruments"></div></div>
+    <div class="sv-q"><label>Precision del seguimiento gestual</label><div class="sv-stars" id="sq-gesture"></div></div>
+    <div class="sv-q"><label>Calidad del modelo anatomico</label><div class="sv-stars" id="sq-model"></div></div>
+    <div class="sv-q"><label>Claridad de los pasos guiados</label><div class="sv-stars" id="sq-steps"></div></div>
+    <div class="sv-q"><label>Satisfaccion general</label><div class="sv-stars" id="sq-overall"></div></div>
+    <button class="sv-submit" onclick="submitSurvey()">Ver resultados</button>
+  </div>
+</div>
+
+<!-- ==================== RESULTS ==================== -->
+<div id="results">
+  <div class="rs-head">
+    <div class="rs-badge">Sesion completada</div>
+    <div class="rs-title">Informe Final</div>
+    <div class="rs-sub" id="rs-sub-lbl">-</div>
+  </div>
+  <div class="stat-grid">
+    <div class="sc"><div class="sc-n" id="rs-time">0:00</div><div class="sc-l">Tiempo total</div></div>
+    <div class="sc"><div class="sc-n" id="rs-steps">0/0</div><div class="sc-l">Pasos completados</div></div>
+    <div class="sc"><div class="sc-n" id="rs-errors">0</div><div class="sc-l">Errores cometidos</div></div>
+    <div class="sc"><div class="sc-n" id="rs-score">-</div><div class="sc-l">Puntuacion final</div></div>
+  </div>
+  <div class="breakdown">
+    <div class="bd-h">Rendimiento</div>
+    <div class="score-bar-wrap">
+      <div class="sbar-bg"><div class="sbar-fill" id="sbar" style="width:0%"></div></div>
+      <div class="sbar-pct" id="sbar-pct">0 / 100</div>
+    </div>
+  </div>
+  <div class="incision-summary" id="incision-block">
+    <div class="is-title">Registro de procedimientos</div>
+    <div class="is-row"><span class="is-l">Incisiones realizadas</span><span class="is-v" id="rs-inc">0</span></div>
+    <div class="is-row"><span class="is-l">Puntos de sutura</span><span class="is-v" id="rs-sut">0</span></div>
+    <div class="is-row"><span class="is-l">Cateter colocado</span><span class="is-v" id="rs-cat">No</span></div>
+    <div class="is-row"><span class="is-l">Longitud incision (aprox.)</span><span class="is-v" id="rs-len">0 mm</span></div>
+  </div>
+  <div class="breakdown">
+    <div class="bd-h">Desglose por paso</div>
+    <div id="bd-steps"></div>
+  </div>
+  <div class="breakdown" id="rs-survey-block">
+    <div class="bd-h">Encuesta del usuario</div>
+    <div id="bd-survey"></div>
+  </div>
+  <button id="btn-restart2" onclick="restartApp()">Nueva sesion</button>
+  <button class="btn-export" onclick="exportMetrics()">Exportar JSON</button>
+</div>
+
+<!-- ==================== MAIN SCRIPT ==================== -->
+<script>
+/* ─────────────────────────────────────────────
+   CLINICAL DATA
+───────────────────────────────────────────── */
+const MODELS = {
+  arm:{
+    name:'Brazo',proc:'Venopuncion — Cateter IV',
+    layers:['Piel','Venas subcutaneas','Musculo','Radio y Cubito'],
+    layerColors:[0xf4a574,0x5566ee,0xcc2222,0xeeeecc],
+    steps:[
+      {
+        title:'Identificar vena de puncion',
+        desc:'Localiza la vena cefalica o basilica. Aplica torniquete 10 cm proximal al sitio.',
+        inst:'scalpel',
+        hint:'Usa BISTURI para marcar la vena en la superficie. Arrastra sobre la vena azul visible.'
+      },
+      {
+        title:'Preparacion aseptica del campo',
+        desc:'Limpia con clorhexidina 2% en movimiento circular. Deja secar 30 segundos.',
+        inst:'forceps',
+        hint:'Usa FORZEPS para limpiar el area: pinza y arrastra sobre la piel dos veces.'
+      },
+      {
+        title:'Incision de acceso vascular',
+        desc:'Realiza una incision superficial de 5 mm sobre la vena. Bisel hacia arriba a 15-30 grados.',
+        inst:'scalpel',
+        hint:'BISTURI: Traza una incision corta (5 mm) directamente sobre la vena. El corte quedara registrado.'
+      },
+      {
+        title:'Insercion del cateter',
+        desc:'Avanza el cateter plastico hasta visualizar retorno de sangre. Verifica flujo sin resistencia.',
+        inst:'catheter',
+        hint:'Selecciona CATETER y toca sobre la incision para insertar. Observa la animacion de insercion.'
+      },
+      {
+        title:'Sutura y cierre del acceso',
+        desc:'Coloca punto de sutura para asegurar el cateter. Documenta fecha, hora, calibre y extremidad.',
+        inst:'suture',
+        hint:'Usa SUTURA: toca 2-3 puntos a lo largo de la incision para colocar los puntos de cierre.'
+      }
+    ]
+  },
+  heart:{
+    name:'Corazon',proc:'Auscultacion Cardiaca',
+    layers:['Pericardio','Miocardio','Camaras','Grandes vasos'],
+    layerColors:[0xffcccc,0xcc2020,0x4466cc,0xee8888],
+    steps:[
+      {title:'Identificar el apex cardiaco',desc:'Palpa el impulso apical en el 5 espacio intercostal, linea medioclavicular.',inst:'forceps',hint:'FORZEPS: presiona sobre la zona inferior izquierda del corazon.'},
+      {title:'Posicionar foco mitral',desc:'Coloca el estetoscopio sobre el foco mitral. Presiona firmemente.',inst:'forceps',hint:'FORZEPS: aplica sobre la region apical del corazon izquierdo.'},
+      {title:'Evaluar S1 — cierre mitral/tricuspide',desc:'Escucha el "lub". Representa el cierre valvular al inicio de la sistole ventricular.',inst:'forceps',hint:'Confirma el primer ruido en el area marcada con FORZEPS.'},
+      {title:'Evaluar S2 — cierre aortico/pulmonar',desc:'Identifica el "dub". Nota el desdoblamiento fisiologico en inspiracion.',inst:'forceps',hint:'Mueve FORZEPS a la base cardiaca para evaluar segundo ruido.'},
+      {title:'Documentar hallazgos',desc:'Registra frecuencia, ritmo, intensidad de S1 y S2, soplos o galope.',inst:'suture',hint:'Coloca marcadores con SUTURA en las zonas de auscultacion evaluadas.'}
+    ]
+  },
+  respiratory:{
+    name:'Pulmones',proc:'Evaluacion Pulmonar Completa',
+    layers:['Pared toracica','Parenquima','Arbol bronquial','Alveolospletzia'],
+    layerColors:[0xffeedd,0xff9999,0xddbbff,0xffcccc],
+    steps:[
+      {title:'Inspeccion del patron respiratorio',desc:'Observa simetria, uso de musculos accesorios y frecuencia durante 60 segundos.',inst:'forceps',hint:'FORZEPS: evalua ambos hemitorax superiores en busca de asimetria.'},
+      {title:'Palpacion — expansion toracica',desc:'Verifica expansion simetrica en ambos campos al pedir inspiracion profunda.',inst:'forceps',hint:'FORZEPS: aplica en zona posterior inferior para sentir expansion bilateral.'},
+      {title:'Percusion de campos pulmonares',desc:'Percute de craneal a caudal comparando ambos lados. Claro=normal, Mate=consolidacion.',inst:'scalpel',hint:'BISTURI: traza linea de percusion de arriba abajo en cada hemitorax.'},
+      {title:'Auscultacion del murmullo vesicular',desc:'Coloca estetoscopio en 8 puntos simetricos. Escucha un ciclo completo por zona.',inst:'forceps',hint:'FORZEPS: toca los 8 focos de auscultacion sequencialmente.'},
+      {title:'Identificar ruidos adventicios',desc:'Documenta sibilancias, crepitaciones, roncus o frote pleural. Correlaciona con clinica.',inst:'suture',hint:'SUTURA: marca con puntos las zonas donde identifiques ruidos patologicos.'}
+    ]
+  }
+};
+
+/* ─────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────── */
+const S = {
+  model: 'arm',
+  instrument: 'scalpel',
+  layer: 0,
+  step: 0,
+  confirmed: [],
+  demoMode: false,
+  xrSession: null,
+  renderer: null,
+  scene: null,
+  camera: null,
+  reticle: null,
+  modelGroup: null,
+  placed: false,
+  hitTestSource: null,
+  timerInterval: null,
+  stepStart: null,
+  audioCtx: null,
+  // Surgical state
+  isDrawingIncision: false,
+  currentIncisionPoints: [],
+  incisionMeshes: [],
+  sutureMeshes: [],
+  catheterPlaced: false,
+  catheterAnim: null,
+  forcepsOpen: false,
+  instrumentMesh: null,
+  incisionCount: 0,
+  sutureCount: 0,
+  totalIncisionLength: 0,
+  // Raycaster
+  raycaster: new THREE.Raycaster(),
+  pointer: new THREE.Vector2(),
+  // Model meshes for raycasting
+  rayTargets: [],
+  // Metrics
+  metrics: {
+    start: null, end: null, total: 0,
+    stepTimes: [], stepErrors: [],
+    errors: 0, clicks: 0, layers: 0, stepsOk: 0,
+    survey: {}
+  }
+};
+
+/* ─────────────────────────────────────────────
+   AUDIO
+───────────────────────────────────────────── */
+function beep(type) {
+  try {
+    if (!S.audioCtx) S.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = S.audioCtx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    const cfg = {
+      cut:     { f: 180, t: 'sawtooth', d: .18, v: .12 },
+      suture:  { f: 660, t: 'sine',     d: .22, v: .14 },
+      catheter:{ f: 440, t: 'triangle', d: .4,  v: .16 },
+      confirm: { f: 880, t: 'sine',     d: .32, v: .15 },
+      error:   { f: 200, t: 'sawtooth', d: .5,  v: .15 },
+      place:   { f: 520, t: 'sine',     d: .45, v: .15 },
+      layer:   { f: 480, t: 'triangle', d: .15, v: .1  },
+      step:    { f: 700, t: 'sine',     d: .2,  v: .1  }
+    };
+    const c = cfg[type] || cfg.step;
+    o.frequency.value = c.f; o.type = c.t;
+    g.gain.setValueAtTime(c.v, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + c.d);
+    o.start(ctx.currentTime); o.stop(ctx.currentTime + c.d);
+  } catch (e) {}
+}
+
+/* ─────────────────────────────────────────────
+   THREE.JS SETUP
+───────────────────────────────────────────── */
+function initThree() {
+  S.scene = new THREE.Scene();
+  S.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, .005, 20);
+  S.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  S.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  S.renderer.setSize(window.innerWidth, window.innerHeight);
+  S.renderer.xr.enabled = true;
+  S.renderer.outputEncoding = THREE.sRGBEncoding;
+  S.renderer.shadowMap.enabled = true;
+  document.body.insertBefore(S.renderer.domElement, document.body.firstChild);
+
+  const amb = new THREE.AmbientLight(0xffffff, .6); S.scene.add(amb);
+  const dir = new THREE.DirectionalLight(0xffffff, .95);
+  dir.position.set(1.5, 2.5, 1.5); dir.castShadow = true; S.scene.add(dir);
+  const rim = new THREE.PointLight(0x00d4ff, .45, 4);
+  rim.position.set(-1.5, 1, -.5); S.scene.add(rim);
+  const bot = new THREE.PointLight(0xff6699, .25, 3);
+  bot.position.set(0, -1.5, .5); S.scene.add(bot);
+
+  // Reticle
+  const rg = new THREE.RingGeometry(.03, .045, 32);
+  rg.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+  const rm = new THREE.MeshBasicMaterial({ color: 0x00d4ff, opacity: .85, transparent: true });
+  S.reticle = new THREE.Mesh(rg, rm);
+  S.reticle.matrixAutoUpdate = false;
+  S.reticle.visible = false;
+  S.scene.add(S.reticle);
+}
+
+/* ─────────────────────────────────────────────
+   INSTRUMENT MESHES (3D)
+───────────────────────────────────────────── */
+function buildScalpel() {
+  const g = new THREE.Group();
+  // Handle
+  const handle = new THREE.Mesh(
+    new THREE.CylinderGeometry(.006, .005, .09, 8),
+    new THREE.MeshPhongMaterial({ color: 0xaaaaaa, shininess: 120 })
+  );
+  handle.position.y = .045;
+  g.add(handle);
+  // Neck
+  const neck = new THREE.Mesh(
+    new THREE.CylinderGeometry(.003, .006, .018, 8),
+    new THREE.MeshPhongMaterial({ color: 0xcccccc, shininess: 150 })
+  );
+  neck.position.y = .009;
+  g.add(neck);
+  // Blade
+  const bShape = new THREE.Shape();
+  bShape.moveTo(0, 0); bShape.lineTo(.002, .005);
+  bShape.lineTo(.001, .028); bShape.lineTo(-.001, .028);
+  bShape.lineTo(-.002, .005); bShape.closePath();
+  const blade = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(bShape, { depth: .0005, bevelEnabled: false }),
+    new THREE.MeshPhongMaterial({ color: 0xe8f0ff, shininess: 200, specular: 0xffffff })
+  );
+  blade.rotation.x = Math.PI / 2;
+  blade.position.set(0, -.024, .001);
+  g.add(blade);
+  // Blood trail indicator dot
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(.0025, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff3355 })
+  );
+  dot.position.y = -.036;
+  dot.name = 'blood-dot';
+  g.add(dot);
+  g.userData.tipOffset = new THREE.Vector3(0, -.038, 0);
+  return g;
+}
+
+function buildForceps() {
+  const g = new THREE.Group();
+  // Handle bar
+  const bar = new THREE.Mesh(
+    new THREE.CylinderGeometry(.005, .005, .075, 8),
+    new THREE.MeshPhongMaterial({ color: 0xbbbbbb, shininess: 100 })
+  );
+  bar.position.y = .038;
+  g.add(bar);
+  // Left arm
+  const la = new THREE.Mesh(
+    new THREE.BoxGeometry(.003, .055, .003),
+    new THREE.MeshPhongMaterial({ color: 0xcccccc })
+  );
+  la.position.set(-.006, -.02, 0);
+  la.name = 'arm-l';
+  g.add(la);
+  // Right arm
+  const ra = la.clone();
+  ra.position.set(.006, -.02, 0);
+  ra.name = 'arm-r';
+  g.add(ra);
+  // Tips
+  [-1, 1].forEach((side, i) => {
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(.004, 6, 6),
+      new THREE.MeshPhongMaterial({ color: 0xdddddd, shininess: 140 })
+    );
+    tip.position.set(side * .006, -.048, 0);
+    g.add(tip);
+  });
+  g.userData.tipOffset = new THREE.Vector3(0, -.05, 0);
+  g.userData.armL = la;
+  g.userData.armR = ra;
+  return g;
+}
+
+function buildSutureNeedle() {
+  const g = new THREE.Group();
+  // Holder
+  const hold = new THREE.Mesh(
+    new THREE.CylinderGeometry(.005, .004, .06, 8),
+    new THREE.MeshPhongMaterial({ color: 0x999999, shininess: 90 })
+  );
+  hold.position.y = .03;
+  g.add(hold);
+  // Curved needle arc
+  const curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(.016, -.015, 0),
+    new THREE.Vector3(.02, -.035, 0)
+  );
+  const pts = curve.getPoints(12);
+  const needleGeo = new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3(pts), 12, .0018, 5, false
+  );
+  const needle = new THREE.Mesh(
+    needleGeo,
+    new THREE.MeshPhongMaterial({ color: 0xe0e8ff, shininess: 180, specular: 0xffffff })
+  );
+  g.add(needle);
+  // Suture thread
+  const threadPts = [
+    new THREE.Vector3(0, .001, 0),
+    new THREE.Vector3(-.015, .012, 0),
+    new THREE.Vector3(-.025, .008, 0)
+  ];
+  const thread = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(threadPts), 8, .0008, 4, false),
+    new THREE.MeshBasicMaterial({ color: 0x0055ff })
+  );
+  g.add(thread);
+  g.userData.tipOffset = new THREE.Vector3(.02, -.036, 0);
+  return g;
+}
+
+function buildCatheter() {
+  const g = new THREE.Group();
+  // Cannula
+  const cannula = new THREE.Mesh(
+    new THREE.CylinderGeometry(.0025, .0018, .09, 8),
+    new THREE.MeshPhongMaterial({ color: 0xeeddaa, transparent: true, opacity: .85 })
+  );
+  cannula.position.y = -.035;
+  g.add(cannula);
+  // Hub
+  const hub = new THREE.Mesh(
+    new THREE.CylinderGeometry(.008, .006, .02, 12),
+    new THREE.MeshPhongMaterial({ color: 0xffcc88 })
+  );
+  hub.position.y = .018;
+  g.add(hub);
+  // Wings
+  [-1, 1].forEach(side => {
+    const wing = new THREE.Mesh(
+      new THREE.BoxGeometry(.016, .006, .003),
+      new THREE.MeshPhongMaterial({ color: 0xff8844 })
+    );
+    wing.position.set(side * .008, .018, 0);
+    g.add(wing);
+  });
+  // Needle inside
+  const needle = new THREE.Mesh(
+    new THREE.CylinderGeometry(.0008, .0008, .1, 6),
+    new THREE.MeshPhongMaterial({ color: 0xddddee, shininess: 200 })
+  );
+  needle.position.y = -.03;
+  g.add(needle);
+  g.userData.tipOffset = new THREE.Vector3(0, -.078, 0);
+  return g;
+}
+
+const INSTRUMENT_BUILDERS = {
+  scalpel: buildScalpel,
+  forceps: buildForceps,
+  suture: buildSutureNeedle,
+  catheter: buildCatheter
+};
+
+function spawnInstrument(type) {
+  if (S.instrumentMesh) { S.scene.remove(S.instrumentMesh); S.instrumentMesh = null; }
+  const mesh = INSTRUMENT_BUILDERS[type]();
+  mesh.visible = false;
+  mesh.scale.setScalar(1.4);
+  S.scene.add(mesh);
+  S.instrumentMesh = mesh;
+}
+
+/* ─────────────────────────────────────────────
+   ANATOMICAL MODEL BUILDERS
+───────────────────────────────────────────── */
+function buildArm() {
+  const g = new THREE.Group();
+  g.scale.setScalar(.13);
+  g.rotation.z = Math.PI / 8;
+  const L = [[], [], [], []];
+
+  // L0: Skin
+  const skinMat = new THREE.MeshPhongMaterial({ color: 0xf4a574, transparent: true, opacity: .65 });
+  const skin = new THREE.Mesh(new THREE.CylinderGeometry(.32, .29, 2.8, 18), skinMat);
+  addM(g, skin, L, 0);
+  const forearm = new THREE.Mesh(
+    new THREE.CylinderGeometry(.24, .32, .5, 14),
+    new THREE.MeshPhongMaterial({ color: 0xf4a574, transparent: true, opacity: .65 })
+  );
+  forearm.position.y = 1.6; addM(g, forearm, L, 0);
+
+  // L1: Veins
+  const veinMat = (d) => new THREE.MeshPhongMaterial({ color: d ? 0x4455cc : 0x5566ee });
+  [[.24, 0, .06, .026, .026, 2.6, 9, 0.06, false],
+   [-.21, 0, .06, .02, .02, 2.4, 9, -0.05, true]]
+    .forEach(([x, y, z, r1, r2, h, seg, rz, dark]) => {
+      const v = new THREE.Mesh(
+        new THREE.CylinderGeometry(r1, r2, h, seg),
+        veinMat(dark)
+      );
+      v.position.set(x, y, z); v.rotation.z = rz;
+      addM(g, v, L, 1);
+    });
+
+  // L2: Muscles
+  [[.04, .45, 0, .24, .19, 1.3, .1, 0xcc2222],
+   [-.04, .4, -.07, .18, .15, 1.2, -.09, 0xaa1818],
+   [0, -.65, 0, .17, .14, 1.05, 0, 0xbb2020]]
+    .forEach(([x, y, z, r1, r2, h, rz, c]) => {
+      const m = new THREE.Mesh(
+        new THREE.CylinderGeometry(r1, r2, h, 14),
+        new THREE.MeshPhongMaterial({ color: c })
+      );
+      m.position.set(x, y, z); m.rotation.z = rz;
+      addM(g, m, L, 2);
+    });
+
+  // L3: Bones (radius + ulna)
+  [[0, .38, 0, .065, .058, 1.35, 0, 0xeeeecc],
+   [.08, -.58, 0, .044, .038, 1.15, .06, 0xeeeecc],
+   [-.08, -.58, 0, .038, .032, 1.1, 0, 0xddddbb]]
+    .forEach(([x, y, z, r1, r2, h, rz, c]) => {
+      const b = new THREE.Mesh(
+        new THREE.CylinderGeometry(r1, r2, h, 10),
+        new THREE.MeshPhongMaterial({ color: c, shininess: 80 })
+      );
+      b.position.set(x, y, z); b.rotation.z = rz;
+      addM(g, b, L, 3);
+    });
+
+  // Vein highlight ring (catheter target)
+  const veinRing = new THREE.Mesh(
+    new THREE.TorusGeometry(.25, .018, 8, 20),
+    new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0 })
+  );
+  veinRing.rotation.z = Math.PI / 2;
+  veinRing.position.set(.24, .3, .06);
+  veinRing.name = 'vein-ring';
+  g.add(veinRing);
+
+  g.userData = { layers: L, type: 'arm', veinRing };
+  return g;
+}
+
+function buildHeart() {
+  const g = new THREE.Group();
+  g.scale.setScalar(.12);
+  const L = [[], [], [], []];
+
+  // L0: Pericardium
+  const pc = new THREE.Mesh(
+    new THREE.SphereGeometry(.62, 22, 18),
+    new THREE.MeshPhongMaterial({ color: 0xffcccc, transparent: true, opacity: .28, side: THREE.DoubleSide, depthWrite: false })
+  );
+  pc.scale.set(1, .94, .84); addM(g, pc, L, 0);
+
+  // L1: Myocardium
+  const myo = new THREE.Mesh(
+    new THREE.SphereGeometry(.52, 20, 16),
+    new THREE.MeshPhongMaterial({ color: 0xcc2020, shininess: 40 })
+  );
+  myo.scale.set(1, 1.06, .87); addM(g, myo, L, 1);
+  const groove = new THREE.Mesh(
+    new THREE.CylinderGeometry(.025, .018, .56, 8),
+    new THREE.MeshPhongMaterial({ color: 0x991010 })
+  );
+  groove.position.set(0, -.1, .32); groove.rotation.z = .15; addM(g, groove, L, 1);
+
+  // L2: Chambers
+  [[-.24, .14, .1, .2, .22, 0x4466cc],
+   [.2, .12, -.1, .18, .2, 0xdd2222],
+   [-.2, -.16, .08, .2, .25, 0x3355bb],
+   [.16, -.19, 0, .18, .26, 0xcc1515]]
+    .forEach(([x, y, z, r, s, c]) => {
+      const ch = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 14, 12),
+        new THREE.MeshPhongMaterial({ color: c })
+      );
+      ch.position.set(x, y, z); ch.scale.setScalar(s / r); addM(g, ch, L, 2);
+    });
+
+  // L3: Great vessels
+  [[.14, .5, -.05, .08, .1, .44, -.28, 0xee8888],
+   [-.12, .46, .06, .065, .08, .38, .22, 0x8899ff],
+   [-.28, .4, 0, .055, .065, .36, 0, 0x5566cc]]
+    .forEach(([x, y, z, r1, r2, h, rz, c]) => {
+      const v = new THREE.Mesh(
+        new THREE.CylinderGeometry(r1, r2, h, 10),
+        new THREE.MeshPhongMaterial({ color: c })
+      );
+      v.position.set(x, y, z); v.rotation.z = rz; addM(g, v, L, 3);
+    });
+
+  g.userData = { layers: L, type: 'heart' };
+  return g;
+}
+
+function buildRespiratory() {
+  const g = new THREE.Group();
+  g.scale.setScalar(.12);
+  const L = [[], [], [], []];
+
+  // L0: Thoracic wall + ribs
+  const th = new THREE.Mesh(
+    new THREE.CylinderGeometry(.53, .45, 1.48, 18),
+    new THREE.MeshPhongMaterial({ color: 0xffeedd, transparent: true, opacity: .18, side: THREE.DoubleSide, depthWrite: false })
+  );
+  th.scale.set(1.14, 1, .67); addM(g, th, L, 0);
+  for (let i = 0; i < 7; i++) {
+    const rib = new THREE.Mesh(
+      new THREE.TorusGeometry(.44, .012, 6, 22, Math.PI),
+      new THREE.MeshPhongMaterial({ color: 0xddddc8, transparent: true, opacity: .45 })
+    );
+    rib.position.y = -.36 + i * .12; rib.scale.set(1.1, 1, .62); addM(g, rib, L, 0);
+  }
+
+  // L1: Lungs
+  [[.22, 0, 0, .9, 1.38, .68, 0xff9999],
+   [-.22, .03, 0, .84, 1.32, .62, 0xff8585]]
+    .forEach(([x, y, z, sx, sy, sz, c]) => {
+      const ln = new THREE.Mesh(
+        new THREE.SphereGeometry(.28, 16, 14),
+        new THREE.MeshPhongMaterial({ color: c, shininess: 20 })
+      );
+      ln.position.set(x, y, z); ln.scale.set(sx, sy, sz); addM(g, ln, L, 1);
+    });
+
+  // L2: Bronchial tree
+  const tr = new THREE.Mesh(
+    new THREE.CylinderGeometry(.044, .04, .52, 10),
+    new THREE.MeshPhongMaterial({ color: 0xddbbff })
+  );
+  tr.position.set(0, .58, .06); addM(g, tr, L, 2);
+  [[.14, .28, .02, .03, .028, .3, .5, 0xccaaff],
+   [-.14, .28, .02, .028, .025, .27, -.55, 0xccaaff]]
+    .forEach(([x, y, z, r1, r2, h, rz, c]) => {
+      const b = new THREE.Mesh(
+        new THREE.CylinderGeometry(r1, r2, h, 8),
+        new THREE.MeshPhongMaterial({ color: c })
+      );
+      b.position.set(x, y, z); b.rotation.z = rz; addM(g, b, L, 2);
+    });
+
+  // L3: Alveoli
+  [[.3, .1, .06], [.22, -.1, .08], [.27, -.26, 0],
+   [-.28, .1, .06], [-.22, -.1, .08], [-.26, -.23, 0],
+   [.17, .23, .06], [-.17, .26, .06]]
+    .forEach(([x, y, z]) => {
+      const a = new THREE.Mesh(
+        new THREE.SphereGeometry(.052, 8, 8),
+        new THREE.MeshPhongMaterial({ color: 0xffcccc, transparent: true, opacity: .88 })
+      );
+      a.position.set(x, y, z); addM(g, a, L, 3);
+    });
+
+  g.userData = { layers: L, type: 'respiratory' };
+  return g;
+}
+
+function addM(group, mesh, layers, layerIdx) {
+  group.add(mesh);
+  layers[layerIdx].push(mesh);
+  S.rayTargets.push(mesh);
+}
+
+const MODEL_BUILDERS = { arm: buildArm, heart: buildHeart, respiratory: buildRespiratory };
+
+/* ─────────────────────────────────────────────
+   LAYERS
+───────────────────────────────────────────── */
+function setLayer(n) {
+  S.layer = n;
+  S.metrics.layers++;
+  S.metrics.clicks++;
+  if (S.modelGroup) {
+    S.modelGroup.userData.layers.forEach((meshes, i) =>
+      meshes.forEach(m => m.visible = i <= n)
+    );
+  }
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('lb' + i)?.classList.toggle('on', i === n);
+  }
+  const labels = MODELS[S.model].layers;
+  document.getElementById('lp-label').textContent = labels[n] || 'Capa';
+  beep('layer');
+  toast(labels[n], 'info');
+  updateMetricsUI();
+}
+function cycleLayer() { setLayer((S.layer + 1) % 4); }
+
+/* ─────────────────────────────────────────────
+   INSTRUMENT SELECT
+───────────────────────────────────────────── */
+const INST_LABELS = {
+  scalpel: 'BISTURI ACTIVO — Arrastra para cortar',
+  forceps: 'FORZEPS ACTIVOS — Pinza para separar',
+  suture: 'SUTURA ACTIVA — Toca para colocar puntos',
+  catheter: 'CATETER ACTIVO — Toca la vena para insertar'
+};
+
+function selectInstrument(type) {
+  S.instrument = type;
+  S.metrics.clicks++;
+  document.querySelectorAll('.inst-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.inst-btn[data-inst="${type}"]`)?.classList.add('active');
+  const statusEl = document.getElementById('inst-status');
+  statusEl.textContent = INST_LABELS[type];
+  statusEl.className = type;
+  spawnInstrument(type);
+  beep('step');
+  updateStepHint();
+  // Show vein ring for catheter
+  if (S.modelGroup?.userData.veinRing) {
+    S.modelGroup.userData.veinRing.material.opacity = type === 'catheter' ? .7 : 0;
+  }
+  // Show gesture hint
+  const gh = document.getElementById('gesture-hint');
+  if (type === 'scalpel') {
+    gh.innerHTML = 'Arrastra para cortar &bull; Suelta para terminar incision';
+    gh.style.display = 'block';
+    setTimeout(() => gh.style.display = 'none', 3000);
+  } else if (type === 'suture') {
+    gh.innerHTML = 'Toca a lo largo de la incision para colocar puntos';
+    gh.style.display = 'block';
+    setTimeout(() => gh.style.display = 'none', 3000);
+  } else if (type === 'catheter') {
+    gh.innerHTML = 'Toca sobre la vena resaltada para insertar el cateter';
+    gh.style.display = 'block';
+    setTimeout(() => gh.style.display = 'none', 3000);
+  } else {
+    gh.style.display = 'none';
+  }
+}
+
+function updateStepHint() {
+  const step = MODELS[S.model].steps[S.step];
+  if (step) document.getElementById('stp-inst').textContent = step.hint;
+}
+
+/* ─────────────────────────────────────────────
+   SURGICAL GESTURES
+───────────────────────────────────────────── */
+function screenToRay(clientX, clientY) {
+  const w = window.innerWidth, h = window.innerHeight;
+  S.pointer.set((clientX / w) * 2 - 1, -(clientY / h) * 2 + 1);
+  S.raycaster.setFromCamera(S.pointer, S.camera);
+  return S.raycaster.intersectObjects(S.rayTargets, false);
+}
+
+function positionInstrumentAt(point, normal) {
+  if (!S.instrumentMesh) return;
+  const offset = S.instrumentMesh.userData.tipOffset || new THREE.Vector3(0, -.03, 0);
+  S.instrumentMesh.position.copy(point).sub(offset);
+  if (normal) {
+    const up = new THREE.Vector3(0, 1, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(up, normal);
+    S.instrumentMesh.quaternion.copy(q);
+  }
+  S.instrumentMesh.visible = true;
+}
+
+// ─── SCALPEL CUT SYSTEM ───────────────────────────────
+function startIncision(point, normal) {
+  S.isDrawingIncision = true;
+  S.currentIncisionPoints = [point.clone()];
+  beep('cut');
+  document.getElementById('gesture-hint').style.display = 'block';
+  document.getElementById('gesture-hint').innerHTML = 'Arrastra para continuar el corte...';
+}
+
+function continueIncision(point) {
+  if (!S.isDrawingIncision) return;
+  const last = S.currentIncisionPoints[S.currentIncisionPoints.length - 1];
+  if (point.distanceTo(last) > .003) {
+    S.currentIncisionPoints.push(point.clone());
+    if (S.currentIncisionPoints.length > 1) updateIncisionMesh();
+  }
+}
+
+function endIncision() {
+  if (!S.isDrawingIncision) return;
+  S.isDrawingIncision = false;
+  document.getElementById('gesture-hint').style.display = 'none';
+  if (S.currentIncisionPoints.length < 2) return;
+
+  // Compute length
+  let len = 0;
+  for (let i = 1; i < S.currentIncisionPoints.length; i++) {
+    len += S.currentIncisionPoints[i].distanceTo(S.currentIncisionPoints[i - 1]);
+  }
+  // Convert from world units to mm (approx scale)
+  const lenMM = Math.round(len * 1000);
+  S.totalIncisionLength += lenMM;
+  S.incisionCount++;
+  updateMetricsUI();
+  beep('cut');
+  toast(`Incision registrada: ~${lenMM} mm`, 'info');
+  S.currentIncisionPoints = [];
+}
+
+function updateIncisionMesh() {
+  // Remove last temp mesh
+  if (S.incisionMeshes.length > 0) {
+    const last = S.incisionMeshes[S.incisionMeshes.length - 1];
+    if (last.userData.temp) { S.scene.remove(last); S.incisionMeshes.pop(); }
+  }
+  if (S.currentIncisionPoints.length < 2) return;
+  const curve = new THREE.CatmullRomCurve3(S.currentIncisionPoints);
+  const tube = new THREE.TubeGeometry(curve, Math.max(4, S.currentIncisionPoints.length * 2), .0018, 5, false);
+  const mesh = new THREE.Mesh(tube, new THREE.MeshBasicMaterial({ color: 0x991122 }));
+  mesh.userData.temp = true;
+  S.scene.add(mesh);
+  S.incisionMeshes.push(mesh);
+  // Blood droplets
+  const pos = S.currentIncisionPoints[S.currentIncisionPoints.length - 1];
+  const drop = new THREE.Mesh(
+    new THREE.SphereGeometry(.0025, 5, 5),
+    new THREE.MeshBasicMaterial({ color: 0xff0022 })
+  );
+  drop.position.copy(pos).add(new THREE.Vector3(0, .002, 0));
+  drop.userData.temp = true;
+  S.scene.add(drop);
+  S.incisionMeshes.push(drop);
+}
+
+// Finalize incision (permanent mesh)
+function finalizeIncision(pts) {
+  if (pts.length < 2) return;
+  const curve = new THREE.CatmullRomCurve3(pts);
+  // Main cut (dark red)
+  const tube = new THREE.TubeGeometry(curve, pts.length * 3, .002, 5, false);
+  const cutMesh = new THREE.Mesh(tube, new THREE.MeshBasicMaterial({ color: 0x880011 }));
+  cutMesh.userData.permanent = true;
+  S.scene.add(cutMesh);
+  S.incisionMeshes.push(cutMesh);
+  // Edge highlight (lighter)
+  const edgeTube = new THREE.TubeGeometry(curve, pts.length * 3, .003, 5, false);
+  const edgeMesh = new THREE.Mesh(
+    edgeTube,
+    new THREE.MeshBasicMaterial({ color: 0xff4466, transparent: true, opacity: .35 })
+  );
+  S.scene.add(edgeMesh);
+  S.incisionMeshes.push(edgeMesh);
+}
+
+// ─── SUTURE SYSTEM ──────────────────────────────────
+function placeStitch(point) {
+  S.sutureCount++;
+  beep('suture');
+
+  // Cross-stitch geometry
+  const stitchGroup = new THREE.Group();
+  const matS = new THREE.LineBasicMaterial({ color: 0x0055ff, linewidth: 2 });
+  const size = .006;
+  // Two crossing lines = X shape
+  [[-size, size, size, -size], [-size, -size, size, size]].forEach(([ax, ay, bx, by]) => {
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(ax, 0, ay),
+      new THREE.Vector3(bx, 0, by)
+    ]);
+    stitchGroup.add(new THREE.Line(geo, matS));
+  });
+  // Knot dot
+  const knot = new THREE.Mesh(
+    new THREE.SphereGeometry(.002, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0x88aaff })
+  );
+  stitchGroup.add(knot);
+
+  stitchGroup.position.copy(point);
+  stitchGroup.position.y += .002;
+  S.scene.add(stitchGroup);
+  S.sutureMeshes.push(stitchGroup);
+
+  toast(`Punto ${S.sutureCount} colocado`, 'ok');
+  updateMetricsUI();
+}
+
+// ─── CATHETER SYSTEM ────────────────────────────────
+function insertCatheter(point) {
+  if (S.catheterPlaced) { toast('Cateter ya insertado', 'err'); return; }
+  S.catheterPlaced = true;
+  beep('catheter');
+  toast('Insertando cateter...', 'info');
+
+  const cathGroup = new THREE.Group();
+  // Cannula (elongated tube)
+  const cann = new THREE.Mesh(
+    new THREE.CylinderGeometry(.003, .0025, .06, 8),
+    new THREE.MeshPhongMaterial({ color: 0xeeddaa, transparent: true, opacity: .88 })
+  );
+  cann.position.copy(point);
+  cann.scale.y = 0; // Start collapsed
+  S.scene.add(cann);
+
+  // Hub at insertion point
+  const hub = new THREE.Mesh(
+    new THREE.CylinderGeometry(.007, .005, .016, 10),
+    new THREE.MeshPhongMaterial({ color: 0xff8844 })
+  );
+  hub.position.copy(point);
+  hub.position.y += .01;
+  S.scene.add(hub);
+
+  // Animate insertion
+  let t = 0;
+  const anim = () => {
+    t = Math.min(t + .04, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    cann.scale.y = ease;
+    cann.position.copy(point);
+    cann.position.y -= ease * .025;
+    if (t < 1) S.catheterAnim = requestAnimationFrame(anim);
+    else {
+      // Flash effect
+      hub.material.emissive = new THREE.Color(0x00ff99);
+      hub.material.emissiveIntensity = .8;
+      setTimeout(() => { hub.material.emissiveIntensity = 0; }, 500);
+      toast('Cateter insertado correctamente', 'ok');
+      beep('confirm');
+      updateMetricsUI();
+    }
+  };
+  S.catheterAnim = requestAnimationFrame(anim);
+}
+
+// ─── FORCEPS ────────────────────────────────────────
+function activateForceps(point) {
+  if (!S.instrumentMesh || S.instrument !== 'forceps') return;
+  S.forcepsOpen = !S.forcepsOpen;
+  beep('step');
+  const armL = S.instrumentMesh.getObjectByName('arm-l');
+  const armR = S.instrumentMesh.getObjectByName('arm-r');
+  if (armL && armR) {
+    const spread = S.forcepsOpen ? .014 : .006;
+    armL.position.x = -spread;
+    armR.position.x = spread;
+  }
+  toast(S.forcepsOpen ? 'Forzeps abiertos — pinzando tejido' : 'Forzeps cerrados', 'info');
+}
+
+/* ─────────────────────────────────────────────
+   STEP SYSTEM
+───────────────────────────────────────────── */
+function initSteps() {
+  const def = MODELS[S.model];
+  S.step = 0;
+  S.confirmed = new Array(def.steps.length).fill(false);
+  S.metrics.stepTimes = new Array(def.steps.length).fill(0);
+  S.metrics.stepErrors = new Array(def.steps.length).fill(0);
+  S.stepStart = Date.now();
+  renderStep();
+}
+
+function renderStep() {
+  const def = MODELS[S.model];
+  const step = def.steps[S.step];
+  const n = def.steps.length;
+  document.getElementById('stp-num').textContent = `Paso ${S.step + 1} de ${n}`;
+  document.getElementById('stp-title').textContent = step.title;
+  document.getElementById('stp-desc').textContent = step.desc;
+  document.getElementById('stp-inst').textContent = step.hint;
+  // Auto-select recommended instrument
+  if (step.inst && step.inst !== S.instrument) {
+    selectInstrument(step.inst);
+  }
+  // Progress dots
+  const prog = document.getElementById('stp-prog');
+  prog.innerHTML = '';
+  const w = Math.floor(190 / n);
+  def.steps.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'stp-dot ' + (S.confirmed[i] ? 'done' : i === S.step ? 'cur' : 'todo');
+    d.style.width = w + 'px';
+    prog.appendChild(d);
+  });
+  placeStepHighlight();
+  updateMetricsUI();
+}
+
+function saveStepTime() {
+  const elapsed = (Date.now() - S.stepStart) / 1000;
+  S.metrics.stepTimes[S.step] = (S.metrics.stepTimes[S.step] || 0) + elapsed;
+}
+
+function nextStep() {
+  S.metrics.clicks++;
+  const n = MODELS[S.model].steps.length;
+  if (S.step < n - 1) {
+    saveStepTime(); S.step++; S.stepStart = Date.now();
+    renderStep(); beep('step');
+  } else { endSession(); }
+  updateMetricsUI();
+}
+
+function prevStep() {
+  S.metrics.clicks++;
+  if (S.step > 0) {
+    saveStepTime(); S.step--; S.stepStart = Date.now();
+    renderStep(); beep('step');
+  }
+  updateMetricsUI();
+}
+
+function confirmStep() {
+  S.metrics.clicks++;
+  if (!S.confirmed[S.step]) {
+    saveStepTime();
+    S.confirmed[S.step] = true;
+    S.metrics.stepsOk++;
+    renderStep();
+    beep('confirm');
+    toast('Paso confirmado', 'ok');
+    setTimeout(() => {
+      if (S.step < MODELS[S.model].steps.length - 1) nextStep();
+      else endSession();
+    }, 800);
+  }
+  updateMetricsUI();
+}
+
+function simError() {
+  S.metrics.clicks++;
+  S.metrics.errors++;
+  S.metrics.stepErrors[S.step] = (S.metrics.stepErrors[S.step] || 0) + 1;
+  toast('Zona incorrecta — vuelve a intentarlo', 'err');
+  beep('error');
+  updateMetricsUI();
+}
+
+/* ─────────────────────────────────────────────
+   STEP HIGHLIGHT (arrow + ring in 3D)
+───────────────────────────────────────────── */
+let hlGroup = null, hlT = 0;
+const ZONE_OFFSETS = {
+  arm:   [[.024, .06, .006], [.022, .09, .008], [.024, .03, .007], [.024, .03, .007], [.024, .03, .007]],
+  heart: [[0, -.04, .055], [.02, .0, .06], [0, .01, .07], [-.01, .03, .06], [0, .01, .06]],
+  respiratory: [[.04, .06, .03], [-.04, .05, .03], [.038, .0, .04], [-.038, -.01, .04], [0, .025, .04]]
+};
+
+function placeStepHighlight() {
+  if (!S.modelGroup) return;
+  if (hlGroup) { S.scene.remove(hlGroup); hlGroup = null; }
+  const offsets = ZONE_OFFSETS[S.model];
+  if (!offsets || !offsets[S.step]) return;
+  const [ox, oy, oz] = offsets[S.step];
+
+  hlGroup = new THREE.Group();
+  // Pulsing ring
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(.012, .018, 24),
+    new THREE.MeshBasicMaterial({ color: 0x00ff99, transparent: true, opacity: .85, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = -Math.PI / 3;
+  ring.name = 'hl-ring';
+  hlGroup.add(ring);
+  // Arrow cone
+  const arrow = new THREE.Mesh(
+    new THREE.ConeGeometry(.008, .025, 8),
+    new THREE.MeshBasicMaterial({ color: 0x00ff99 })
+  );
+  arrow.position.y = .042; arrow.rotation.z = Math.PI;
+  arrow.name = 'hl-arrow';
+  hlGroup.add(arrow);
+  // Arrow stem
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(.002, .002, .018, 6),
+    new THREE.MeshBasicMaterial({ color: 0x00ff99 })
+  );
+  stem.position.y = .026;
+  hlGroup.add(stem);
+
+  // Position relative to model
+  const wp = S.modelGroup.localToWorld(
+    new THREE.Vector3(ox, oy, oz).multiplyScalar(1 / S.modelGroup.scale.x)
+  );
+  hlGroup.position.copy(wp);
+  S.scene.add(hlGroup);
+}
+
+function animateHighlight(t) {
+  if (!hlGroup) return;
+  hlT = t * .0014;
+  const ring = hlGroup.getObjectByName('hl-ring');
+  const arrow = hlGroup.getObjectByName('hl-arrow');
+  const pulse = .3 + .7 * Math.abs(Math.sin(hlT));
+  if (ring) { ring.material.opacity = pulse; ring.scale.setScalar(.85 + .18 * Math.abs(Math.sin(hlT))); }
+  if (arrow) arrow.position.y = .042 + .008 * Math.sin(hlT * 1.3);
+}
+
+/* ─────────────────────────────────────────────
+   METRICS UI
+───────────────────────────────────────────── */
+function updateMetricsUI() {
+  const n = MODELS[S.model].steps.length;
+  document.getElementById('mm-steps').textContent = `${S.metrics.stepsOk}/${n}`;
+  document.getElementById('mm-errors').textContent = S.metrics.errors;
+  document.getElementById('mm-incisions').textContent = S.incisionCount;
+  document.getElementById('mm-sutures').textContent = S.sutureCount;
+}
+
+/* ─────────────────────────────────────────────
+   TIMER
+───────────────────────────────────────────── */
+function startTimer() {
+  S.metrics.start = Date.now();
+  S.timerInterval = setInterval(() => {
+    const e = Math.floor((Date.now() - S.metrics.start) / 1000);
+    document.getElementById('tb-timer').textContent = fmtTime(e);
+  }, 1000);
+}
+function fmtTime(s) {
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/* ─────────────────────────────────────────────
+   TOAST
+───────────────────────────────────────────── */
+let toastTmr;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = type; el.style.display = 'block';
+  clearTimeout(toastTmr);
+  toastTmr = setTimeout(() => el.style.display = 'none', 2600);
+}
+
+/* ─────────────────────────────────────────────
+   TOUCH / GESTURE HANDLER
+───────────────────────────────────────────── */
+function setupGestures(canvas) {
+  let pinchDist = null;
+  let isRotating = false;
+  let lastX = 0, lastY = 0;
+  let touchStartTime = 0;
+  let touchStartX = 0, touchStartY = 0;
+  let hasMoved = false;
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    S.metrics.clicks++;
+    touchStartTime = Date.now();
+    hasMoved = false;
+
+    if (!S.placed && !S.demoMode) {
+      if (S.reticle.visible) {
+        const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+        S.reticle.matrix.decompose(p, q, sc);
+        placeModelAt(p);
+      }
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
+      touchStartX = tx; touchStartY = ty;
+      lastX = tx; lastY = ty;
+
+      const hits = screenToRay(tx, ty);
+      if (hits.length > 0 && S.placed) {
+        const hit = hits[0];
+        positionInstrumentAt(hit.point, hit.face?.normal);
+
+        if (S.instrument === 'scalpel') {
+          isRotating = false;
+          startIncision(hit.point, hit.face?.normal);
+        } else if (S.instrument === 'forceps') {
+          isRotating = false;
+          activateForceps(hit.point);
+        } else if (S.instrument === 'catheter') {
+          insertCatheter(hit.point);
+        } else {
+          isRotating = true;
+        }
+      } else {
+        isRotating = true;
+      }
+    } else if (e.touches.length === 2) {
+      pinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      isRotating = false;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!S.placed) return;
+
+    if (e.touches.length === 1) {
+      const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
+      const dx = Math.abs(tx - touchStartX), dy = Math.abs(ty - touchStartY);
+      if (dx > 4 || dy > 4) hasMoved = true;
+
+      const hits = screenToRay(tx, ty);
+      if (hits.length > 0) {
+        const hit = hits[0];
+        positionInstrumentAt(hit.point, hit.face?.normal);
+
+        if (S.instrument === 'scalpel' && S.isDrawingIncision) {
+          continueIncision(hit.point);
+        }
+      }
+
+      if (isRotating && S.modelGroup) {
+        const rdx = tx - lastX, rdy = ty - lastY;
+        S.modelGroup.rotation.y += rdx * .008;
+        S.modelGroup.rotation.x += rdy * .006;
+        if (hlGroup) {
+          hlGroup.rotation.y += rdx * .008;
+          hlGroup.rotation.x += rdy * .006;
+        }
+      }
+      lastX = tx; lastY = ty;
+
+    } else if (e.touches.length === 2 && pinchDist != null) {
+      const nd = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (S.modelGroup) {
+        const sc = Math.max(.2, Math.min(4, S.modelGroup.scale.x * (nd / pinchDist)));
+        S.modelGroup.scale.setScalar(sc);
+      }
+      pinchDist = nd;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    if (!S.placed) return;
+    const dt = Date.now() - touchStartTime;
+    const wasTap = !hasMoved && dt < 320;
+
+    if (S.instrument === 'scalpel') {
+      if (S.isDrawingIncision) {
+        finalizeIncision(S.currentIncisionPoints.slice());
+        endIncision();
+      }
+    } else if (S.instrument === 'suture' && wasTap) {
+      const tx = touchStartX, ty = touchStartY;
+      const hits = screenToRay(tx, ty);
+      if (hits.length > 0) placeStitch(hits[0].point);
+    }
+    if (e.touches.length === 0) {
+      isRotating = false; pinchDist = null;
+      if (S.instrumentMesh) S.instrumentMesh.visible = false;
+    }
+  }, { passive: false });
+
+  // Mouse for desktop
+  let mouseDown = false, mouseX = 0, mouseY = 0;
+  canvas.addEventListener('mousedown', e => {
+    if (!S.placed) return;
+    mouseDown = true; mouseX = e.clientX; mouseY = e.clientY;
+    S.metrics.clicks++;
+    const hits = screenToRay(e.clientX, e.clientY);
+    if (hits.length > 0) {
+      positionInstrumentAt(hits[0].point, hits[0].face?.normal);
+      if (S.instrument === 'scalpel') startIncision(hits[0].point);
+      else if (S.instrument === 'catheter') insertCatheter(hits[0].point);
+    }
+  });
+  window.addEventListener('mousemove', e => {
+    if (!S.placed) return;
+    const hits = screenToRay(e.clientX, e.clientY);
+    if (hits.length > 0) {
+      positionInstrumentAt(hits[0].point, hits[0].face?.normal);
+      if (mouseDown && S.instrument === 'scalpel' && S.isDrawingIncision) {
+        continueIncision(hits[0].point);
+      }
+    }
+    if (mouseDown && S.modelGroup) {
+      S.modelGroup.rotation.y += (e.clientX - mouseX) * .007;
+      S.modelGroup.rotation.x += (e.clientY - mouseY) * .006;
+      mouseX = e.clientX; mouseY = e.clientY;
+    }
+  });
+  window.addEventListener('mouseup', e => {
+    if (S.instrument === 'scalpel' && S.isDrawingIncision) {
+      finalizeIncision(S.currentIncisionPoints.slice());
+      endIncision();
+    } else if (S.instrument === 'suture' && !S.isDrawingIncision) {
+      const hits = screenToRay(e.clientX, e.clientY);
+      if (hits.length > 0) placeStitch(hits[0].point);
+    } else if (S.instrument === 'forceps') {
+      activateForceps(new THREE.Vector3());
+    }
+    mouseDown = false;
+    if (S.instrumentMesh) S.instrumentMesh.visible = false;
+  });
+  canvas.addEventListener('wheel', e => {
+    if (!S.modelGroup || !S.placed) return;
+    const sc = Math.max(.2, Math.min(4, S.modelGroup.scale.x * (1 - e.deltaY * .001)));
+    S.modelGroup.scale.setScalar(sc);
+  }, { passive: true });
+}
+
+/* ─────────────────────────────────────────────
+   MODEL PLACEMENT
+───────────────────────────────────────────── */
+function placeModelAt(pos) {
+  S.rayTargets = [];
+  const mg = MODEL_BUILDERS[S.model]();
+  mg.position.copy(pos);
+  mg.position.y += .045;
+  S.modelGroup = mg;
+  S.scene.add(mg);
+  S.placed = true;
+  S.reticle.visible = false;
+  document.getElementById('scan-hint').style.display = 'none';
+  setLayer(0);
+  selectInstrument(MODELS[S.model].steps[0].inst || 'scalpel');
+  setTimeout(placeStepHighlight, 500);
+  beep('place');
+  toast('Modelo colocado — Arrastra el bisturi para operar', 'ok');
+  updateMetricsUI();
+}
+
+/* ─────────────────────────────────────────────
+   WEBXR
+───────────────────────────────────────────── */
+async function startAR() {
+  if (!navigator.xr) { showCompat('WebXR no disponible. Usa Chrome (Android) o Safari (iOS).'); return; }
+  const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+  if (!ok) { showCompat('AR inmersivo no soportado. Necesitas ARCore (Android) o ARKit (iOS).'); return; }
+
+  initThree();
+  try {
+    S.xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['dom-overlay', 'plane-detection'],
+      domOverlay: { root: document.getElementById('overlay') }
+    });
+    S.renderer.xr.setReferenceSpaceType('local');
+    await S.renderer.xr.setSession(S.xrSession);
+    S.xrSession.addEventListener('end', () => S.renderer.setAnimationLoop(null));
+
+    const vs = await S.xrSession.requestReferenceSpace('viewer');
+    S.hitTestSource = await S.xrSession.requestHitTestSource({ space: vs });
+
+    showOverlay();
+    S.renderer.setAnimationLoop(xrLoop);
+  } catch (err) {
+    showCompat('Error AR: ' + err.message);
+  }
+}
+
+function xrLoop(time, frame) {
+  if (!frame) { S.renderer.render(S.scene, S.camera); return; }
+  const rs = S.renderer.xr.getReferenceSpace();
+  if (S.hitTestSource && !S.placed) {
+    const hits = frame.getHitTestResults(S.hitTestSource);
+    if (hits.length > 0) {
+      const pose = hits[0].getPose(rs);
+      if (pose) {
+        S.reticle.visible = true;
+        S.reticle.matrix.fromArray(pose.transform.matrix);
+        document.getElementById('scan-hint').style.opacity = '0';
+      }
+    } else { S.reticle.visible = false; }
+  }
+  runModelAnimations(time);
+  animateHighlight(time);
+  S.renderer.render(S.scene, S.camera);
+}
+
+/* ─────────────────────────────────────────────
+   DEMO MODE
+───────────────────────────────────────────── */
+function startDemo() {
+  S.demoMode = true;
+  initThree();
+  S.camera.position.set(0, .18, .62);
+  S.camera.lookAt(0, 0, 0);
+
+  const grid = new THREE.GridHelper(2, 20, 0x001833, 0x001122);
+  S.scene.add(grid);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(4, 4),
+    new THREE.MeshBasicMaterial({ color: 0x040c18 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -.001;
+  S.scene.add(floor);
+
+  document.getElementById('demo-banner').style.display = 'block';
+  document.getElementById('demo-banner').textContent = 'MODO DEMO — sin camara AR';
+  showOverlay();
+  placeModelAt(new THREE.Vector3(0, 0, 0));
+  setupGestures(S.renderer.domElement);
+
+  S.renderer.setAnimationLoop(t => {
+    runModelAnimations(t);
+    animateHighlight(t);
+    S.renderer.render(S.scene, S.camera);
+  });
+}
+
+function runModelAnimations(t) {
+  if (!S.modelGroup) return;
+  if (S.model === 'heart') {
+    const beat = 1 + .015 * Math.sin(t * .0019 * 2 * Math.PI);
+    S.modelGroup.scale.setScalar(beat);
+  }
+  if (S.model === 'respiratory') {
+    const breath = 1 + .03 * Math.sin(t * .00095 * 2 * Math.PI);
+    const sc = S.modelGroup.scale.x;
+    S.modelGroup.scale.set(sc * breath, sc * (1 + .04 * Math.sin(t * .00095 * 2 * Math.PI)), sc * breath);
+  }
+}
+
+function showOverlay() {
+  const ss = document.getElementById('start');
+  ss.style.opacity = '0';
+  setTimeout(() => ss.style.display = 'none', 360);
+  document.getElementById('overlay').classList.add('on');
+  document.getElementById('tb-model-name').textContent = MODELS[S.model].name;
+  document.getElementById('tb-proc-name').textContent = MODELS[S.model].proc;
+  document.getElementById('mm-steps').textContent = `0/${MODELS[S.model].steps.length}`;
+  spawnInstrument('scalpel');
+  initSteps();
+  startTimer();
+  if (!S.demoMode) setupGestures(S.renderer.domElement);
+}
+
+/* ─────────────────────────────────────────────
+   SESSION END
+───────────────────────────────────────────── */
+function endSession() {
+  clearInterval(S.timerInterval);
+  saveStepTime();
+  S.metrics.end = Date.now();
+  S.metrics.total = Math.floor((S.metrics.end - S.metrics.start) / 1000);
+  if (S.xrSession) S.xrSession.end().catch(() => {});
+  if (S.demoMode) S.renderer.setAnimationLoop(null);
+  document.getElementById('overlay').classList.remove('on');
+  buildSurveyUI();
+  document.getElementById('survey').classList.add('on');
+}
+
+/* ─────────────────────────────────────────────
+   SURVEY
+───────────────────────────────────────────── */
+function buildSurveyUI() {
+  ['instruments', 'gesture', 'model', 'steps', 'overall'].forEach(q => {
+    const el = document.getElementById('sq-' + q);
+    el.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+      const b = document.createElement('button');
+      b.className = 'sv-star'; b.textContent = i;
+      b.onclick = () => rateSurvey(q, i, el);
+      el.appendChild(b);
+    }
+  });
+}
+function rateSurvey(q, v, container) {
+  S.metrics.survey[q] = v;
+  container.querySelectorAll('.sv-star').forEach((b, i) => b.classList.toggle('on', i < v));
+}
+function submitSurvey() {
+  document.getElementById('survey').classList.remove('on');
+  showResults();
+}
+
+/* ─────────────────────────────────────────────
+   RESULTS
+───────────────────────────────────────────── */
+function showResults() {
+  const def = MODELS[S.model];
+  const n = def.steps.length;
+  const t = S.metrics.total;
+  const score = Math.max(0, Math.round(
+    100 - (S.metrics.errors * 8) - (((n - S.metrics.stepsOk) / n) * 40)
+  ));
+
+  document.getElementById('rs-sub-lbl').textContent = `${def.name} — ${def.proc}`;
+  document.getElementById('rs-time').textContent = fmtTime(t);
+  document.getElementById('rs-steps').textContent = `${S.metrics.stepsOk}/${n}`;
+  document.getElementById('rs-errors').textContent = S.metrics.errors;
+  document.getElementById('rs-score').textContent = score + '%';
+
+  setTimeout(() => {
+    const fill = document.getElementById('sbar');
+    fill.style.width = score + '%';
+    fill.style.background = score >= 80
+      ? 'linear-gradient(90deg,#00d4ff,#00ff99)'
+      : score >= 60 ? 'linear-gradient(90deg,#ffaa00,#ffdd44)'
+      : 'linear-gradient(90deg,#ff3355,#ff8899)';
+  }, 150);
+  document.getElementById('sbar-pct').textContent = `${score} / 100`;
+
+  // Surgical data
+  document.getElementById('rs-inc').textContent = S.incisionCount;
+  document.getElementById('rs-sut').textContent = S.sutureCount;
+  document.getElementById('rs-cat').textContent = S.catheterPlaced ? 'Si' : 'No';
+  document.getElementById('rs-len').textContent = S.totalIncisionLength + ' mm';
+
+  // Steps breakdown
+  const bd = document.getElementById('bd-steps');
+  bd.innerHTML = '';
+  def.steps.forEach((step, i) => {
+    const st = S.metrics.stepTimes[i] || 0;
+    const er = S.metrics.stepErrors[i] || 0;
+    const row = document.createElement('div');
+    row.className = 'bd-r';
+    row.innerHTML = `<div class="bd-n">${i + 1}</div>
+      <div class="bd-name">${step.title.substring(0, 44)}${step.title.length > 44 ? '...' : ''}</div>
+      <div class="bd-t">${fmtTime(Math.round(st))}</div>
+      <div class="bd-s ${er > 0 ? 's-er' : 's-ok'}">${er > 0 ? er + ' err' : 'OK'}</div>`;
+    bd.appendChild(row);
+  });
+
+  // Survey
+  const surveyLabels = {
+    instruments: 'Realismo instrumentos',
+    gesture: 'Seguimiento gestual',
+    model: 'Modelo anatomico',
+    steps: 'Pasos guiados',
+    overall: 'Satisfaccion general'
+  };
+  const bds = document.getElementById('bd-survey');
+  bds.innerHTML = '';
+  let anyRating = false;
+  Object.entries(S.metrics.survey).forEach(([q, v]) => {
+    if (!v) return; anyRating = true;
+    const row = document.createElement('div');
+    row.className = 'bd-r';
+    row.innerHTML = `<div class="bd-name">${surveyLabels[q] || q}</div>
+      <div class="bd-t" style="color:var(--amber)">${String(v).repeat ? v + '/5 — ' + (v >= 4 ? 'Excelente' : v >= 3 ? 'Bueno' : 'Regular') : ''}</div>`;
+    bds.appendChild(row);
+  });
+  if (!anyRating) bds.innerHTML = '<div style="font-size:.72rem;color:var(--dim);padding:4px 0">Encuesta no completada.</div>';
+
+  document.getElementById('results').style.display = 'block';
+}
+
+/* ─────────────────────────────────────────────
+   EXPORT
+───────────────────────────────────────────── */
+function exportMetrics() {
+  const def = MODELS[S.model];
+  const n = def.steps.length;
+  const score = Math.max(0, Math.round(100 - (S.metrics.errors * 8) - (((n - S.metrics.stepsOk) / n) * 40)));
+  const data = {
+    metadata: {
+      app: 'MedAR Surgical v2.0',
+      fecha: new Date().toISOString(),
+      modelo: def.name,
+      procedimiento: def.proc,
+      modo: S.demoMode ? 'demo' : 'ar'
+    },
+    desempeno: {
+      duracion_segundos: S.metrics.total,
+      duracion: fmtTime(S.metrics.total),
+      pasos_completados: S.metrics.stepsOk,
+      total_pasos: n,
+      errores: S.metrics.errors,
+      clics: S.metrics.clicks,
+      capas_exploradas: S.metrics.layers,
+      puntuacion: score
+    },
+    procedimientos_quirurgicos: {
+      incisiones: S.incisionCount,
+      longitud_total_mm: S.totalIncisionLength,
+      puntos_sutura: S.sutureCount,
+      cateter_colocado: S.catheterPlaced
+    },
+    pasos: def.steps.map((s, i) => ({
+      numero: i + 1,
+      titulo: s.title,
+      instrumento: s.inst,
+      tiempo_segundos: Math.round(S.metrics.stepTimes[i] || 0),
+      errores: S.metrics.stepErrors[i] || 0,
+      completado: !!S.confirmed[i]
+    })),
+    encuesta: S.metrics.survey
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `medar-${S.model}-${Date.now()}.json`;
+  a.click();
+  toast('Metricas exportadas', 'ok');
+}
+
+/* ─────────────────────────────────────────────
+   RESTART
+───────────────────────────────────────────── */
+function restartApp() {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('start').style.display = 'flex';
+  document.getElementById('start').style.opacity = '1';
+  document.getElementById('overlay').classList.remove('on');
+  clearInterval(S.timerInterval);
+  if (S.catheterAnim) cancelAnimationFrame(S.catheterAnim);
+
+  Object.assign(S, {
+    instrument: 'scalpel', layer: 0, step: 0, confirmed: [],
+    demoMode: false, xrSession: null, placed: false, hitTestSource: null,
+    timerInterval: null, stepStart: null,
+    isDrawingIncision: false, currentIncisionPoints: [],
+    incisionMeshes: [], sutureMeshes: [],
+    catheterPlaced: false, catheterAnim: null, forcepsOpen: false,
+    instrumentMesh: null, incisionCount: 0, sutureCount: 0, totalIncisionLength: 0,
+    rayTargets: [], modelGroup: null,
+    metrics: { start: null, end: null, total: 0, stepTimes: [], stepErrors: [], errors: 0, clicks: 0, layers: 0, stepsOk: 0, survey: {} }
+  });
+
+  if (S.scene) S.scene.children.length = 0;
+  if (S.renderer) {
+    S.renderer.setAnimationLoop(null);
+    const c = S.renderer.domElement;
+    if (c.parentNode) c.parentNode.removeChild(c);
+  }
+  S.renderer = null; S.scene = null; S.camera = null; S.reticle = null;
+  hlGroup = null; hlT = 0;
+}
+
+/* ─────────────────────────────────────────────
+   INIT
+───────────────────────────────────────────── */
+function showCompat(msg) {
+  const el = document.getElementById('compat-msg');
+  el.style.display = 'block'; el.textContent = msg;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.mc').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('.mc').forEach(x => x.classList.remove('sel'));
+    c.classList.add('sel');
+    S.model = c.dataset.m;
+  }));
+  document.getElementById('btn-ar').addEventListener('click', startAR);
+  document.getElementById('btn-demo').addEventListener('click', startDemo);
+
+  if (!navigator.xr) {
+    showCompat('WebXR no disponible. Usa Chrome (Android) o Safari (iOS). El modo demo funciona en cualquier navegador.');
+    document.getElementById('btn-ar').disabled = true;
+  } else {
+    navigator.xr.isSessionSupported('immersive-ar').then(ok => {
+      if (!ok) {
+        showCompat('AR inmersivo no soportado en este dispositivo. Necesitas ARCore o ARKit. El modo demo esta disponible.');
+        document.getElementById('btn-ar').disabled = true;
+      }
+    }).catch(() => {});
+  }
+  buildSurveyUI();
+  window.addEventListener('resize', () => {
+    if (S.renderer && !S.xrSession) {
+      S.renderer.setSize(window.innerWidth, window.innerHeight);
+      if (S.camera) { S.camera.aspect = window.innerWidth / window.innerHeight; S.camera.updateProjectionMatrix(); }
+    }
+  });
+});
+</script>
+</body>
+</html>
