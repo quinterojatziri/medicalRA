@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>NeuroSim XR</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+:root{
+  --neon:#00d4ff;--green:#00ff88;--red:#ff3366;--yellow:#ffdd00;
+  --bg:#04080f;--panel:rgba(2,8,20,0.91);--border:rgba(0,212,255,0.22);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;
+  font-family:'Rajdhani',sans-serif;color:#ddeeff;touch-action:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:1}
+
+/* ── SPLASH ── */
+#splash{position:fixed;inset:0;z-index:300;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.slogo{font-family:'Orbitron',monospace;font-size:clamp(22px,6vw,52px);font-weight:900;
+  background:linear-gradient(135deg,#00d4ff,#00ff88,#ff4488);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:5px}
+.ssub{font-family:'Share Tech Mono',monospace;font-size:clamp(9px,2vw,12px);
+  color:var(--neon);letter-spacing:4px;opacity:.6}
+.sbrain{width:170px;height:170px;position:relative;margin:8px 0}
+.sbrain svg{width:100%;height:100%}
+.sline{position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--neon),transparent);
+  box-shadow:0 0 8px var(--neon);animation:sd 1.8s linear infinite}
+@keyframes sd{0%{top:0}100%{top:100%}}
+.sbtn{background:transparent;border:1.5px solid var(--neon);color:var(--neon);
+  font-family:'Orbitron',monospace;font-size:12px;letter-spacing:3px;
+  padding:11px 32px;cursor:pointer;transition:.3s;position:relative;overflow:hidden;
+  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%)}
+.sbtn::before{content:'';position:absolute;inset:0;background:var(--neon);
+  transform:scaleX(0);transform-origin:left;transition:.3s;z-index:-1}
+.sbtn:hover{color:var(--bg)}.sbtn:hover::before{transform:scaleX(1)}
+.swarn{font-size:10px;color:rgba(255,255,255,.3);text-align:center;max-width:300px;line-height:1.6}
+.ar-note{font-size:11px;color:rgba(0,212,255,.5);text-align:center;max-width:300px;line-height:1.7;
+  border:1px solid rgba(0,212,255,.2);padding:8px 12px;margin-top:4px}
+
+/* ── HUD TOP ── */
+#hud{position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 12px;background:linear-gradient(180deg,rgba(0,0,0,.85),transparent);
+  pointer-events:none}
+.htitle{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:3px;
+  color:var(--neon);text-shadow:0 0 8px var(--neon)}
+.hm-row{display:flex;gap:6px;pointer-events:auto}
+.hm{border:1px solid var(--border);background:rgba(0,0,0,.6);padding:2px 7px;
+  display:flex;flex-direction:column;align-items:center;min-width:44px}
+.hml{font-size:7px;color:rgba(255,255,255,.35);letter-spacing:1px}
+.hmv{font-size:12px;color:var(--green);font-family:'Share Tech Mono',monospace}
+
+/* ── AR BUTTON ── */
+#ar-btn{position:fixed;top:9px;right:9px;z-index:100;
+  background:rgba(0,0,0,.75);border:1.5px solid var(--neon);
+  color:var(--neon);font-family:'Orbitron',monospace;
+  font-size:9px;letter-spacing:2px;padding:8px 13px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:.3s}
+#ar-btn:hover{background:var(--neon);color:var(--bg)}
+#ar-btn.active{border-color:var(--red);color:var(--red)}
+#ar-btn.active:hover{background:var(--red);color:#fff}
+.ardot{width:7px;height:7px;border-radius:50%;background:currentColor;
+  animation:ad 1s ease-in-out infinite}
+@keyframes ad{0%,100%{opacity:1}50%{opacity:.15}}
+
+/* ── PROGRESS ── */
+#pbar{position:fixed;top:0;left:0;right:0;height:2px;z-index:100;background:rgba(0,212,255,.1)}
+#pfill{height:100%;background:var(--neon);box-shadow:0 0 5px var(--neon);transition:width .5s;width:0}
+
+/* ── COLLAPSIBLE PANELS ── */
+.panel{position:fixed;top:50%;z-index:50;width:195px;
+  background:var(--panel);border:1px solid var(--border);
+  transition:transform .32s cubic-bezier(.4,0,.2,1);
+  max-height:72vh;overflow-y:auto;}
+#panel-steps{left:0;border-left:3px solid var(--neon);
+  transform:translateY(-50%) translateX(-100%);}
+#panel-steps.open{transform:translateY(-50%) translateX(0);}
+#panel-info{right:0;border-right:3px solid var(--red);
+  transform:translateY(-50%) translateX(100%);}
+#panel-info.open{transform:translateY(-50%) translateX(0);}
+.panel-inner{padding:12px}
+
+/* Panel toggle tabs */
+#tab-steps{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:51;
+  background:var(--panel);border:1px solid var(--border);border-left:none;
+  width:22px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:rgba(255,255,255,.45);transition:.2s;writing-mode:horizontal-tb}
+#tab-steps:hover{color:#fff;background:rgba(0,212,255,.12)}
+#tab-info{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:51;
+  background:var(--panel);border:1px solid var(--border);border-right:none;
+  width:22px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:rgba(255,255,255,.45);transition:.2s}
+#tab-info:hover{color:#fff;background:rgba(0,212,255,.12)}
+
+/* Step list */
+.sph{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;
+  color:var(--neon);margin-bottom:8px;display:flex;justify-content:space-between}
+.si{display:flex;align-items:flex-start;gap:5px;padding:5px 5px;margin:2px 0;
+  font-size:10px;border-left:2px solid transparent;transition:.3s;line-height:1.4}
+.si.active{border-left-color:var(--green);background:rgba(0,255,136,.07);color:var(--green)}
+.si.done{color:rgba(255,255,255,.28);text-decoration:line-through}
+.si.locked{color:rgba(255,255,255,.18)}
+.sn{width:16px;height:16px;border-radius:50%;border:1px solid currentColor;
+  display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;margin-top:1px}
+.si-body{flex:1}
+.si-tool{font-size:9px;color:var(--yellow);opacity:.8;margin-top:2px}
+
+/* Info panel */
+.ititle{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;
+  color:var(--red);margin-bottom:7px}
+.icontent{font-size:10px;line-height:1.65;color:rgba(255,255,255,.68);margin-bottom:10px}
+.ilayer{display:flex;align-items:center;gap:4px;padding:3px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:9px;cursor:pointer;transition:.2s}
+.ilayer:hover{background:rgba(255,255,255,.04)}
+.ilayer.active-layer{background:rgba(0,212,255,.08)}
+.ild{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ildepth{margin-left:auto;font-size:8px;color:rgba(255,255,255,.3)}
+
+/* ── TOOL BAR (collapsible bottom) ── */
+#toolbar-wrap{position:fixed;bottom:0;left:50%;transform:translateX(-50%);z-index:50;
+  display:flex;flex-direction:column;align-items:center}
+#toolbar-tab{background:var(--panel);border:1px solid var(--border);border-bottom:none;
+  padding:3px 22px;cursor:pointer;font-size:9px;color:rgba(255,255,255,.4);
+  font-family:'Orbitron',monospace;letter-spacing:2px;transition:.2s}
+#toolbar-tab:hover{color:#fff}
+#toolbar{display:flex;gap:5px;background:var(--panel);border:1px solid var(--border);
+  border-bottom:none;padding:7px 10px;
+  transition:transform .32s,opacity .32s;transform-origin:bottom center}
+#toolbar.hidden{transform:scaleY(0);opacity:0;pointer-events:none}
+.tb{width:48px;height:48px;border:1px solid var(--border);background:transparent;
+  color:#666;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;font-size:7px;letter-spacing:.5px;transition:.25s;position:relative}
+.tb svg{width:19px;height:19px}
+.tb.active{border-color:var(--neon);color:var(--neon);background:rgba(0,212,255,.1);
+  box-shadow:0 0 12px rgba(0,212,255,.2)}
+.tb:hover{border-color:var(--neon);color:var(--neon)}
+.tb .badge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;
+  background:var(--yellow);display:none}
+.tb.required .badge{display:block}
+
+/* ── STATUS ── */
+#status{position:fixed;bottom:85px;left:0;right:0;z-index:49;
+  pointer-events:none;text-align:center;padding:0 12px}
+#instr{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--yellow);
+  text-shadow:0 0 6px rgba(255,221,0,.35);animation:bi 3s ease-in-out infinite}
+@keyframes bi{0%,100%{opacity:1}50%{opacity:.5}}
+#hint{font-size:9px;color:rgba(0,212,255,.4);letter-spacing:1px;margin-top:2px}
+
+/* ── DEPTH VIS ── */
+#dvis{position:fixed;right:26px;bottom:95px;z-index:50;
+  width:22px;height:128px;background:rgba(0,0,0,.45);
+  border:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.dl{flex:1;display:flex;align-items:center;justify-content:center;
+  font-size:6px;font-family:'Share Tech Mono',monospace;
+  color:rgba(255,255,255,.22);border-bottom:1px solid rgba(255,255,255,.04);transition:.4s}
+.dl.active{color:#fff}
+
+/* ── CORNERS ── */
+.cd{position:fixed;z-index:49;width:38px;height:38px;
+  border-color:rgba(0,212,255,.28);border-style:solid;pointer-events:none}
+.cd.tl{top:5px;left:5px;border-width:2px 0 0 2px}
+.cd.tr{top:5px;right:5px;border-width:2px 2px 0 0}
+.cd.bl{bottom:5px;left:5px;border-width:0 0 2px 2px}
+.cd.br{bottom:5px;right:5px;border-width:0 2px 2px 0}
+
+/* ── LAYER FLASH ── */
+#llabel{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%);
+  z-index:150;pointer-events:none;opacity:0;transition:opacity .4s;
+  font-family:'Orbitron',monospace;font-size:clamp(14px,4vw,26px);
+  letter-spacing:5px;text-shadow:0 0 18px currentColor;font-weight:700;text-align:center}
+
+/* ── INCISION CANVAS ── */
+#ic{position:fixed;inset:0;pointer-events:none;z-index:45}
+
+/* ── ALERT ── */
+.alert{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:200;
+  background:rgba(2,8,20,.94);border:1px solid;padding:7px 18px;
+  font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;
+  animation:pa .3s ease;pointer-events:none;white-space:nowrap;max-width:90vw}
+@keyframes pa{0%{opacity:0;transform:translate(-50%,-6px)}100%{opacity:1;transform:translate(-50%,0)}}
+
+/* ── AR HIT TEST RETICLE ── */
+#reticle-msg{display:none;position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%);z-index:52;
+  font-family:'Share Tech Mono',monospace;font-size:12px;
+  color:var(--green);letter-spacing:3px;text-align:center;
+  text-shadow:0 0 8px var(--green);pointer-events:none}
+
+/* ── AR ERROR / INFO ── */
+#ar-info{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:200;background:var(--panel);border:1px solid var(--border);
+  padding:22px;text-align:center;max-width:320px;font-size:12px;line-height:1.8}
+#ar-info .ai-title{font-family:'Orbitron',monospace;font-size:13px;
+  color:var(--neon);margin-bottom:10px;letter-spacing:2px}
+#ar-info .ai-close{background:transparent;border:1px solid var(--neon);color:var(--neon);
+  font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;
+  padding:6px 18px;cursor:pointer;margin-top:12px;transition:.2s}
+#ar-info .ai-close:hover{background:var(--neon);color:var(--bg)}
+
+/* ── MODAL ── */
+#modal{display:none;position:fixed;inset:0;z-index:300;
+  background:rgba(0,0,0,.9);align-items:center;justify-content:center}
+.mbox{background:var(--bg);border:1px solid var(--border);border-top:3px solid var(--neon);
+  padding:22px;width:min(430px,92vw);max-height:80vh;overflow-y:auto}
+.mtitle{font-family:'Orbitron',monospace;font-size:13px;letter-spacing:3px;
+  color:var(--neon);margin-bottom:12px}
+.qi{margin:10px 0}.ql{font-size:11px;margin-bottom:5px;color:rgba(255,255,255,.7)}
+.qo{display:flex;gap:4px;flex-wrap:wrap}
+.qb{padding:4px 10px;border:1px solid var(--border);background:transparent;color:#777;
+  cursor:pointer;font-size:10px;font-family:'Rajdhani',sans-serif;transition:.2s}
+.qb.sel{border-color:var(--neon);color:var(--neon);background:rgba(0,212,255,.07)}
+.msub{width:100%;padding:10px;background:var(--neon);border:none;color:var(--bg);
+  font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;margin-top:14px}
+.rbox{border:1px solid var(--border);padding:10px;margin-top:12px;display:none}
+.rr{display:flex;justify-content:space-between;padding:3px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);font-size:10px}
+.rv{color:var(--green)}
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<canvas id="ic"></canvas>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="slogo">NEUROSIM XR</div>
+  <div class="ssub">SIMULADOR DE NEUROCIRUGÍA EN REALIDAD AUMENTADA</div>
+  <div class="sbrain">
+    <div class="sline"></div>
+    <svg viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="bg1" cx="50%" cy="45%" r="55%">
+          <stop offset="0%" stop-color="#ff9999" stop-opacity=".9"/>
+          <stop offset="100%" stop-color="#881111" stop-opacity=".15"/>
+        </radialGradient>
+        <filter id="gf"><feGaussianBlur stdDeviation="2.5"/></filter>
+      </defs>
+      <ellipse cx="90" cy="86" rx="66" ry="58" fill="url(#bg1)" stroke="#ff7777" stroke-width="1.2"/>
+      <line x1="90" y1="30" x2="90" y2="144" stroke="#cc3333" stroke-width="1.5" opacity=".4"/>
+      <path d="M46 70 Q58 58 74 64 Q84 50 100 60 Q116 46 130 62 Q144 56 150 72" fill="none" stroke="#ff5555" stroke-width="1.8" opacity=".62"/>
+      <path d="M40 90 Q54 80 70 86 Q82 74 98 82 Q114 70 130 80 Q146 75 154 90" fill="none" stroke="#ff5555" stroke-width="1.4" opacity=".48"/>
+      <path d="M44 112 Q60 102 76 108 Q90 98 106 106 Q122 96 136 106 Q148 102 155 114" fill="none" stroke="#ff5555" stroke-width="1" opacity=".35"/>
+      <ellipse cx="90" cy="148" rx="34" ry="18" fill="url(#bg1)" stroke="#dd9966" stroke-width="1" opacity=".6"/>
+      <rect x="83" y="163" width="14" height="11" rx="3" fill="#ddaa88" opacity=".38"/>
+      <circle cx="112" cy="78" r="9" fill="none" stroke="#ffdd00" stroke-width="2"
+        stroke-dasharray="3,2" filter="url(#gf)" opacity=".9">
+        <animate attributeName="r" values="9;13;9" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <text x="112" y="82" text-anchor="middle" font-size="7" fill="#ffdd00" font-family="monospace" opacity=".8">GBM</text>
+    </svg>
+  </div>
+  <button class="sbtn" id="startbtn">▶ INICIAR SIMULACIÓN</button>
+  <div class="ar-note">
+    📱 Para RA real: abre desde <strong>Chrome/Safari en móvil</strong><br>
+    con HTTPS (GitHub Pages). El modelo se ancla<br>
+    físicamente en superficies reales del entorno.
+  </div>
+  <div class="swarn">⚠ Solo uso educativo — Neurocirugía virtual WebXR</div>
+</div>
+
+<!-- UI ELEMENTS -->
+<div id="pbar"><div id="pfill"></div></div>
+<div class="cd tl"></div><div class="cd tr"></div>
+<div class="cd bl"></div><div class="cd br"></div>
+
+<div id="hud">
+  <div class="htitle">⬡ NEUROSIM XR</div>
+  <div class="hm-row">
+    <div class="hm"><span class="hml">TIEMPO</span><span class="hmv" id="tval">00:00</span></div>
+    <div class="hm"><span class="hml">PASO</span><span class="hmv" id="sval">0/9</span></div>
+    <div class="hm"><span class="hml">ERR</span><span class="hmv" id="eval" style="color:var(--red)">0</span></div>
+    <div class="hm"><span class="hml">CAPA</span><span class="hmv" id="lval" style="font-size:9px">—</span></div>
+  </div>
+</div>
+
+<button id="ar-btn" onclick="startAR()">
+  <span class="ardot"></span><span id="ar-label">INICIAR RA</span>
+</button>
+
+<!-- STEP PANEL -->
+<div id="tab-steps" onclick="togglePanel('steps')">≡</div>
+<div class="panel" id="panel-steps">
+  <div class="panel-inner">
+    <div class="sph"><span>PROCEDIMIENTO</span><span id="ppct">0%</span></div>
+    <div id="slist"></div>
+  </div>
+</div>
+
+<!-- INFO PANEL -->
+<div id="tab-info" onclick="togglePanel('info')">ℹ</div>
+<div class="panel" id="panel-info">
+  <div class="panel-inner">
+    <div class="ititle">⬡ ANATOMÍA</div>
+    <div class="icontent" id="ainfo">Toca el cerebro para ver información anatómica de cada capa.</div>
+    <div id="layer-list">
+      <div class="ilayer" onclick="jumpLayer(0)"><div class="ild" style="background:#c87040"></div><span>Scalp</span><span class="ildepth">0–5mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(1)"><div class="ild" style="background:#e8dcc0"></div><span>Cráneo</span><span class="ildepth">5–12mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(2)"><div class="ild" style="background:#c8ddc0"></div><span>Duramadre</span><span class="ildepth">12–15mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(3)"><div class="ild" style="background:#b0ccee"></div><span>Aracnoides</span><span class="ildepth">15–17mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(4)"><div class="ild" style="background:#ddbb88"></div><span>Piamadre</span><span class="ildepth">17–18mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(5)"><div class="ild" style="background:#dd7777"></div><span>Corteza</span><span class="ildepth">18–22mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(6)"><div class="ild" style="background:#ddd0f0"></div><span>S. Blanca</span><span class="ildepth">22–50mm</span></div>
+      <div class="ilayer" onclick="jumpLayer(7)"><div class="ild" style="background:#ffdd00"></div><span>TUMOR GBM</span><span class="ildepth">40–55mm</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- DEPTH VIS -->
+<div id="dvis">
+  <div class="dl" id="d0">S</div><div class="dl" id="d1">H</div>
+  <div class="dl" id="d2">D</div><div class="dl" id="d3">A</div>
+  <div class="dl" id="d4">P</div><div class="dl" id="d5">C</div>
+  <div class="dl" id="d6">W</div>
+  <div class="dl" id="d7" style="color:var(--yellow)">T</div>
+</div>
+
+<!-- TOOLBAR -->
+<div id="toolbar-wrap">
+  <div id="toolbar-tab" onclick="toggleToolbar()">▲ INSTRUMENTOS</div>
+  <div id="toolbar">
+    <button class="tb active" id="t-scalpel" onclick="setTool('scalpel')">
+      <div class="badge"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 21L18 6"/><path d="M15 9L19 5"/><circle cx="4" cy="20" r="1.3" fill="currentColor"/>
+      </svg>BISTURÍ
+    </button>
+    <button class="tb" id="t-drill" onclick="setTool('drill')">
+      <div class="badge"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2l-2 2-8 8 2 2 8-8 2-2-2-2z"/><path d="M8 12l-6 6v2h2l6-6"/>
+        <circle cx="17" cy="5" r="2"/>
+      </svg>TREPANO
+    </button>
+    <button class="tb" id="t-micro" onclick="setTool('micro')">
+      <div class="badge"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="8" r="3.5"/><path d="M12 11.5v7"/><path d="M8 19h8"/><path d="M10 19v2h4v-2"/>
+      </svg>MICRO
+    </button>
+    <button class="tb" id="t-aspirator" onclick="setTool('aspirator')">
+      <div class="badge"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+        <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+      </svg>ASPIR.
+    </button>
+    <button class="tb" id="t-coag" onclick="setTool('coag')">
+      <div class="badge"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>COAG.
+    </button>
+    <button class="tb" id="t-suture" onclick="setTool('suture')">
+      <div class="badge"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M4 20Q9 12 14 12Q17 12 20 4"/><circle cx="20" cy="4" r="1.5"/>
+      </svg>SUTURA
+    </button>
+    <button class="tb" id="t-rotate" onclick="setTool('rotate')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+      </svg>ROTAR
+    </button>
+  </div>
+</div>
+
+<div id="status">
+  <div id="instr">▶ Toca INICIAR RA para anclar el cerebro en tu espacio real</div>
+  <div id="hint">TOCA+ARRASTRA: incidir | PELLIZCA: zoom | DOBLE TAP: avanzar paso</div>
+</div>
+
+<div id="llabel"></div>
+
+<!-- AR HIT-TEST MESSAGE -->
+<div id="reticle-msg">Mueve el dispositivo<br>hasta encontrar una superficie</div>
+
+<!-- AR INFO -->
+<div id="ar-info">
+  <div class="ai-title" id="ai-title">REALIDAD AUMENTADA</div>
+  <div id="ai-body"></div>
+  <button class="ai-close" onclick="closeARInfo()">CERRAR</button>
+</div>
+
+<!-- MODAL SATISFACCIÓN -->
+<div id="modal">
+  <div class="mbox">
+    <div class="mtitle">⬡ EVALUACIÓN POST-OPERATORIA</div>
+    <div id="mmet" style="font-family:'Share Tech Mono',monospace;font-size:10px;margin-bottom:12px;color:var(--green)"></div>
+    <div class="qi"><div class="ql">1. Dificultad del procedimiento:</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q1')">Muy fácil</button>
+        <button class="qb" onclick="qsel(this,'q1')">Moderado</button>
+        <button class="qb" onclick="qsel(this,'q1')">Difícil</button>
+        <button class="qb" onclick="qsel(this,'q1')">Muy difícil</button>
+      </div></div>
+    <div class="qi"><div class="ql">2. Realismo del modelo 3D:</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q2')">★☆☆☆☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★☆☆☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★★☆☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★★★☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★★★★</button>
+      </div></div>
+    <div class="qi"><div class="ql">3. Utilidad educativa:</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q3')">Ninguna</button>
+        <button class="qb" onclick="qsel(this,'q3')">Poca</button>
+        <button class="qb" onclick="qsel(this,'q3')">Media</button>
+        <button class="qb" onclick="qsel(this,'q3')">Alta</button>
+        <button class="qb" onclick="qsel(this,'q3')">Excelente</button>
+      </div></div>
+    <div class="qi"><div class="ql">4. ¿Lo recomendarías?</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q4')">No</button>
+        <button class="qb" onclick="qsel(this,'q4')">Tal vez</button>
+        <button class="qb" onclick="qsel(this,'q4')">Sí</button>
+        <button class="qb" onclick="qsel(this,'q4')">Definitivamente</button>
+      </div></div>
+    <button class="msub" onclick="submitQ()">REGISTRAR EVALUACIÓN</button>
+    <div class="rbox" id="rbox">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--green);margin-bottom:7px">REPORTE DE SESIÓN</div>
+      <div id="rcont"></div>
+    </div>
+  </div>
+</div>
+
+<!-- THREE.JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+//═══════════════════════════════════════════════════════════════
+//  NEUROSIM XR  ·  Real WebXR AR  +  Clipping-plane brain layers
+//═══════════════════════════════════════════════════════════════
+
+/* ── GLOBAL STATE ── */
+const G = {
+  step: 0, errors: 0, tool: 'scalpel',
+  startTime: null, started: false,
+  isDragging: false, mx: 0, my: 0, touchDist: 0,
+  cutDepth: 0, tumorRemoved: false,
+  panelOpen: { steps: false, info: false },
+  toolbarHidden: false,
+  answers: {},
+  // XR
+  xrSession: null, xrRefSpace: null, xrHitSource: null,
+  xrActive: false, xrPlaced: false,
+  reticleMatrix: new Float32Array(16),
+  reticlePose: null,
+};
+
+/* ── STEP DEFINITIONS ── */
+// tool: required instrument for this step
+const STEPS = [
+  { label:'Posicionar modelo',    icon:'📡', tool:null,
+    instr:'Apunta la cámara al suelo/mesa y toca para ANCLAR el cerebro',
+    cut:0, ainfo:'Modo WebXR AR activo. El modelo se colocará sobre la superficie física detectada.' },
+  { label:'Incisión cutánea',     icon:'🔪', tool:'scalpel',
+    instr:'Usa el BISTURÍ — arrastra sobre el scalp para incidir la piel',
+    cut:1, ainfo:'SCALP: 5 capas (piel, TCS, gálea, tejido laxo, pericráneo). Alta vascularización. Incisión curvilínea bicoronal.' },
+  { label:'Craneotomía',          icon:'⚙️', tool:'drill',
+    instr:'Usa el TREPANO — aplica sobre el cráneo para apertura ósea',
+    cut:2, ainfo:'CRÁNEO: Diploé entre tablas interna/externa. 6–8mm grosor. Craneotomía con sierra oscilante tras trepanación inicial.' },
+  { label:'Apertura duramadre',   icon:'📋', tool:'scalpel',
+    instr:'Bisturí con PRECISIÓN — incide la duramadre en C, respeta los senos',
+    cut:3, ainfo:'DURAMADRE: Meninge externa fibrosa. Apertura en C. Peligro: senos venosos (sagital, transverso). Requiere microcirugía.' },
+  { label:'Apertura aracnoides',  icon:'💧', tool:'scalpel',
+    instr:'Bisturí micro — abre delicadamente la aracnoides para liberar LCR',
+    cut:4, ainfo:'ARACNOIDES: Meninge media avascular. Apertura libera LCR. Espacio subaracnoideo contiene arterias cerebrales.' },
+  { label:'Exponer corteza',      icon:'🧠', tool:'scalpel',
+    instr:'Bisturí — retracción suave para exponer la corteza cerebral',
+    cut:5, ainfo:'PIAMADRE+CORTEZA: Interfaz crítica. Mapeado cortical con estimulación si el área es elocuente. Evitar retracción >20mmHg.' },
+  { label:'Identificar tumor',    icon:'🎯', tool:'micro',
+    instr:'Activa el MICROSCOPIO — busca la zona amarilla (GBM)',
+    cut:6, ainfo:'CORTEZA: 6 capas neuronales, 2–4mm. GBM infiltra bordes. Microscopio intraoperatorio + fluorescencia 5-ALA.' },
+  { label:'Extirpar GBM',         icon:'🔬', tool:'aspirator',
+    instr:'ASPIRADOR ULTRASÓNICO sobre el tumor amarillo — resección máxima',
+    cut:7, ainfo:'GLIOBLASTOMA GBM IV: Hipervascular, hetereogéneo. Resección >98% mejora supervivencia. Aspirador ultrasónico (CUSA).' },
+  { label:'Hemostasia y cierre',  icon:'⚡', tool:'coag',
+    instr:'COAGULADOR bipolar → sella vasos. Luego SUTURA por capas',
+    cut:0, ainfo:'CIERRE: Coagulación bipolar. Surgicel/Gelfoam en lecho. Sutura dural hermética. Craneoplastia. Cierre por capas anatómicas.' },
+];
+
+const TOOL_LABELS = {
+  scalpel:'Bisturí', drill:'Trepano', micro:'Microscopio',
+  aspirator:'Aspirador US', coag:'Coagulador', suture:'Sutura', rotate:'Rotar'
+};
+
+/* ── THREE.JS OBJECTS ── */
+let scene, cam, renderer, clock;
+let brainGroup, layerMeshes = [], tumorMesh, tumorGlow;
+let cutPlane;            // shared THREE.Plane for clipping
+let cutFaces = [];       // rings shown on cut cross-section
+let bloodParticles = [];
+let arrowMesh;
+let xrReticle;           // the hit-test reticle ring shown on floor
+
+/* ── INCISION CANVAS ── */
+const ic = document.getElementById('ic');
+const ctx2 = ic.getContext('2d');
+let trailPts = [], trailTmr = null;
+
+/* ─────────────────────────────────────────────
+   NOISE
+───────────────────────────────────────────── */
+function n3(x, y, z) {
+  function h(n) { const s = Math.sin(n) * 43758.5453; return s - Math.floor(s); }
+  const i=Math.floor(x),j=Math.floor(y),k=Math.floor(z);
+  const u=x-i,v=y-j,w=z-k;
+  const uu=u*u*(3-2*u),vv=v*v*(3-2*v),ww=w*w*(3-2*w);
+  const a=h(i+h(j+h(k))),b=h(i+1+h(j+h(k))),c=h(i+h(j+1+h(k))),d=h(i+1+h(j+1+h(k))),
+        e=h(i+h(j+h(k+1))),f=h(i+1+h(j+h(k+1))),g=h(i+h(j+1+h(k+1))),ii=h(i+1+h(j+1+h(k+1)));
+  return a+uu*(b-a)+vv*(c-a)+uu*vv*(a-b-c+d)+
+    ww*(e-a+uu*(a-b-e+f)+vv*(a-c-e+g)+uu*vv*(-a+b+c-d+e-f-g+ii))-.5;
+}
+function fbm(x, y, z, o) {
+  let v=0,a=.5,f=1;
+  for(let i=0;i<o;i++){v+=a*n3(x*f,y*f,z*f);a*=.5;f*=2;}
+  return v;
+}
+
+/* ─────────────────────────────────────────────
+   BRAIN GEOMETRY
+───────────────────────────────────────────── */
+function makeLayerGeo(r, seed, noise, oct) {
+  const geo = new THREE.SphereGeometry(r, 72, 56);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x=pos.getX(i), y=pos.getY(i), z=pos.getZ(i);
+    const l = Math.sqrt(x*x+y*y+z*z);
+    const nx=x/l, ny=y/l, nz=z/l;
+    const d = fbm(nx*3+seed, ny*3, nz*3, oct)*noise + fbm(nx*7+seed, ny*7, nz*6, 2)*noise*.32;
+    const nr = r + d;
+    pos.setXYZ(i, nx*nr, ny*nr*0.87, nz*nr*0.90);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/* ─────────────────────────────────────────────
+   THREE.JS INIT
+───────────────────────────────────────────── */
+function initThree() {
+  const W = window.innerWidth, H = window.innerHeight;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x04080f);
+  scene.fog = new THREE.FogExp2(0x04080f, 0.055);
+
+  cam = new THREE.PerspectiveCamera(50, W/H, 0.001, 200);
+  cam.position.set(0, 0.3, 5.5);
+
+  renderer = new THREE.WebGLRenderer({
+    canvas: document.getElementById('c'),
+    antialias: true, alpha: true, logarithmicDepthBuffer: true
+  });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.28;
+  renderer.localClippingEnabled = true;  // CRITICAL for layer clipping
+  renderer.xr.enabled = true;            // CRITICAL for WebXR
+
+  clock = new THREE.Clock();
+
+  buildLighting();
+  buildBrain();
+  buildEnv();
+  buildXRReticle();
+  animate();
+}
+
+/* ─────────────────────────────────────────────
+   LIGHTING  (OR room style)
+───────────────────────────────────────────── */
+function buildLighting() {
+  scene.add(new THREE.AmbientLight(0x1a2a3a, 1.1));
+  const key = new THREE.SpotLight(0xf2f8ff, 4, 18, Math.PI/5, 0.3, 1.2);
+  key.position.set(0, 8, 2); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  scene.add(key); scene.add(key.target);
+  const fill = new THREE.DirectionalLight(0xffe8cc, 0.65); fill.position.set(-4, 2, 3); scene.add(fill);
+  const rim  = new THREE.DirectionalLight(0x88ccff, 0.5);  rim.position.set(2, -1, -5);  scene.add(rim);
+  const side = new THREE.DirectionalLight(0xaaccff, 0.3);  side.position.set(-5, 0, 0);  scene.add(side);
+}
+
+/* ─────────────────────────────────────────────
+   BRAIN LAYERS
+   All layers are always present in the scene.
+   A single THREE.Plane (cutPlane) clips the
+   outer layers away — revealing inner ones.
+   The cut face (RingGeometry rings) fills the
+   cross-section so ALL layers are visible.
+───────────────────────────────────────────── */
+function buildBrain() {
+  brainGroup = new THREE.Group();
+  brainGroup.rotation.x = 0.05;
+  scene.add(brainGroup);
+
+  // The clipping plane starts far away (clips nothing)
+  cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 100);
+
+  const LDEFS = [
+    // idx | name        | radius | hexColor  | rough | metal | emiHex  | noise | oct | opacity | clearcoat
+    [0, 'SCALP',        1.56, 0xc87040, 0.88, .02, 0x110800, .055, 4, 1.0,  0.20],
+    [1, 'CRÁNEO',       1.41, 0xe8dcc0, 0.75, .05, 0x080600, .018, 2, 1.0,  0.10],
+    [2, 'DURAMADRE',    1.31, 0xc8ddc0, 0.55, .00, 0x081008, .012, 2, 1.0,  0.40],
+    [3, 'ARACNOIDES',   1.27, 0xb0ccee, 0.22, .00, 0x040810, .008, 1, 0.68, 0.85],
+    [4, 'PIAMADRE',     1.23, 0xddbb88, 0.45, .00, 0x100800, .006, 1, 0.85, 0.55],
+    [5, 'CORTEZA',      1.19, 0xdd7777, 0.80, .00, 0x220808, .075, 6, 1.0,  0.15],
+    [6, 'S. BLANCA',    0.96, 0xddd0f0, 0.60, .00, 0x080810, .030, 3, 1.0,  0.20],
+    [7, 'NÚCLEOS BASE', 0.66, 0xaa8877, 0.70, .00, 0x140808, .040, 3, 1.0,  0.10],
+  ];
+
+  layerMeshes = [];
+  LDEFS.forEach(([idx, name, r, col, rough, metal, emi, noise, oct, op, cc]) => {
+    const geo = makeLayerGeo(r, idx * 37.3, noise, oct);
+
+    // Add vertex color veins to cortex
+    if (idx === 5) {
+      const vc = [], pos = geo.attributes.position;
+      for (let v = 0; v < pos.count; v++) {
+        const x=pos.getX(v), y=pos.getY(v), z=pos.getZ(v);
+        const vn = fbm(x*9, y*9, z*9, 3);
+        vc.push(.85+vn*.13, .42+vn*.06, .42+vn*.06);
+      }
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(vc, 3));
+    }
+
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: col, emissive: emi, emissiveIntensity: .38,
+      roughness: rough, metalness: metal,
+      clearcoat: cc, clearcoatRoughness: .28,
+      transparent: op < 1, opacity: op,
+      vertexColors: idx === 5,
+      side: THREE.DoubleSide,
+      // Outer layers get clipped by the cut plane
+      // Inner layers do NOT get clipped — they show through the opening
+      clippingPlanes: idx < 5 ? [cutPlane] : [],
+      clipShadows: false,
+    });
+    if (idx === 5) { mat.sheen = .4; mat.sheenColor = new THREE.Color(0xff8888); }
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData = { layerIdx: idx, layerName: name };
+    layerMeshes.push(mesh);
+    brainGroup.add(mesh);
+  });
+
+  buildCutFaces();
+  buildTumor();
+  buildCerebellum();
+  buildBrainstem();
+  buildVessels();
+
+  // Arrow (hidden until tumor exposed)
+  arrowMesh = new THREE.ArrowHelper(
+    new THREE.Vector3(-1, -.5, -.5).normalize(),
+    new THREE.Vector3(.9, .48, .65), .38, 0xffdd00, .09, .07
+  );
+  arrowMesh.visible = false;
+  brainGroup.add(arrowMesh);
+}
+
+/* ── CUT FACE RINGS ──
+   One RingGeometry per anatomical layer.
+   Positioned at the cut plane's Z, normal facing camera.
+   Makes ALL layers visible simultaneously as a cross-section.
+*/
+function buildCutFaces() {
+  const radii  = [1.56, 1.41, 1.31, 1.27, 1.23, 1.19, 0.96, 0.66];
+  const colors = [0xc87040, 0xe8dcc0, 0xc8ddc0, 0xb0ccee, 0xddbb88, 0xdd7777, 0xddd0f0, 0xaa8877];
+  const emis   = [0x221100, 0x181510, 0x0a1008, 0x040810, 0x100800, 0x440000, 0x080810, 0x140808];
+  cutFaces = [];
+
+  // Build inner → outer so inner rings draw on top
+  for (let i = radii.length - 1; i >= 0; i--) {
+    const inner = i > 0 ? radii[i-1] * 0.872 : 0;
+    const outer = radii[i] * 0.872;
+
+    const geo = new THREE.RingGeometry(inner, outer, 72);
+    // Add subtle biological noise to ring edges
+    const pos = geo.attributes.position;
+    for (let v = 0; v < pos.count; v++) {
+      const x=pos.getX(v), y=pos.getY(v);
+      const a = Math.atan2(y, x), l = Math.sqrt(x*x+y*y);
+      if (l > .01) {
+        const nn = n3(Math.cos(a)*3+i, Math.sin(a)*3, 0) * .013;
+        pos.setX(v, x + x/l*nn); pos.setY(v, y + y/l*nn);
+      }
+    }
+    geo.computeVertexNormals();
+
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: colors[i], emissive: emis[i], emissiveIntensity: .3,
+      roughness: i===0 ? .85 : i===1 ? .68 : .45,
+      metalness: 0, side: THREE.DoubleSide,
+      transparent: true, opacity: 0,
+    });
+    if (i === 5) { mat.emissive = new THREE.Color(0x441100); mat.emissiveIntensity = .4; }
+    if (i === 3) mat.opacity = 0; // starts hidden, will be set to .60 when exposed
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.visible = false;
+    mesh.userData = { isCutFace: true, layerIdx: i };
+    cutFaces.push(mesh);
+    brainGroup.add(mesh);
+  }
+
+  // Central blood pool
+  const bMesh = new THREE.Mesh(
+    new THREE.CircleGeometry(.065, 32),
+    new THREE.MeshBasicMaterial({ color: 0x880000, transparent: true, opacity: 0, side: THREE.DoubleSide })
+  );
+  bMesh.userData = { isBloodPool: true };
+  bMesh.visible = false;
+  cutFaces.push(bMesh);
+  brainGroup.add(bMesh);
+}
+
+/* ── TUMOR ── */
+function buildTumor() {
+  const tg = new THREE.SphereGeometry(.22, 48, 36);
+  const tp = tg.attributes.position;
+  for (let i = 0; i < tp.count; i++) {
+    const x=tp.getX(i), y=tp.getY(i), z=tp.getZ(i);
+    const l = Math.sqrt(x*x+y*y+z*z);
+    const nx=x/l, ny=y/l, nz=z/l;
+    const d = fbm(nx*5+99, ny*5, nz*5, 4)*.07 + fbm(nx*12, ny*12+99, nz*10, 2)*.025;
+    tp.setXYZ(i, nx*(.22+d), ny*(.22+d), nz*(.22+d));
+  }
+  tg.computeVertexNormals();
+  tumorMesh = new THREE.Mesh(tg, new THREE.MeshPhysicalMaterial({
+    color:0xddcc00, emissive:0xaa6600, emissiveIntensity:.55,
+    roughness:.35, metalness:.1, transparent:true, opacity:0,
+  }));
+  tumorMesh.position.set(.38, .15, .18);
+  brainGroup.add(tumorMesh);
+
+  tumorGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(.3, 24, 18),
+    new THREE.MeshBasicMaterial({ color:0xffaa00, transparent:true, opacity:0, side:THREE.BackSide })
+  );
+  tumorGlow.position.copy(tumorMesh.position);
+  brainGroup.add(tumorGlow);
+
+  G.tumorLight = new THREE.PointLight(0xff8800, 0, 1.3);
+  G.tumorLight.position.copy(tumorMesh.position);
+  brainGroup.add(G.tumorLight);
+}
+
+function buildCerebellum() {
+  const geo = makeLayerGeo(.58, 200, .065, 5);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setY(i, pos.getY(i)*.58); pos.setZ(i, pos.getZ(i)*.68);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ color:0xdd9988, roughness:.82 }));
+  m.position.set(0, -1.16, -.3); m.castShadow = true;
+  brainGroup.add(m);
+}
+
+function buildBrainstem() {
+  const geo = new THREE.CylinderGeometry(.14, .20, .82, 22);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, pos.getZ(i) + pos.getY(i)*.08);
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ color:0xcc9977, roughness:.65 }));
+  m.position.set(0, -1.52, .05); m.rotation.x = .15; m.castShadow = true;
+  brainGroup.add(m);
+}
+
+function buildVessels() {
+  const vm = new THREE.LineBasicMaterial({ color:0xcc2222, transparent:true, opacity:.55 });
+  const paths = [
+    [[-.2,.5,1.1],[.1,.6,1.05],[.5,.55,.95],[.8,.4,.8],[1,.1,.65]],
+    [[-.8,.7,.5],[-.4,.9,.7],[0,1,.6],[.4,.9,.7]],
+    [[.3,.3,-1.0],[.6,0,-.9],[.8,-.3,-.7]],
+    [[-.5,.2,1.0],[-.6,-.1,.95],[-.7,-.4,.8]],
+    [[.2,.55,1.05],[.2,.8,.9],[0,.9,.75]],
+    [[.5,.6,.9],[.65,.7,.75]],
+  ];
+  paths.forEach(pts => {
+    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0]*1.19, p[1]*1.05, p[2]*1.1)));
+    brainGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(22)), vm));
+  });
+  const vm2 = new THREE.LineBasicMaterial({ color:0xee3333, transparent:true, opacity:.7 });
+  const main = [[-1.1,0,.3],[-.9,.3,.7],[-.5,.5,1],[0,.55,1.1],[.5,.5,.95],[.9,.3,.65],[1.1,0,.3]];
+  const mc = new THREE.CatmullRomCurve3(main.map(p => new THREE.Vector3(p[0]*1.2, p[1]*1.06, p[2]*1.11)));
+  brainGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(mc.getPoints(38)), vm2));
+}
+
+function buildEnv() {
+  const grid = new THREE.GridHelper(30, 30, 0x001133, 0x000c22);
+  grid.position.y = -2.1; grid.material.transparent = true; grid.material.opacity = .3;
+  scene.add(grid);
+  const pg = new THREE.BufferGeometry();
+  const pp = new Float32Array(500*3);
+  for (let i = 0; i < 500; i++) {
+    pp[i*3]=(Math.random()-.5)*25; pp[i*3+1]=(Math.random()-.5)*25; pp[i*3+2]=(Math.random()-.5)*25;
+  }
+  pg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+  scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ color:0x00d4ff, size:.04, transparent:true, opacity:.25 })));
+}
+
+/* ── XR RETICLE  (ring shown on detected floor surface) ── */
+function buildXRReticle() {
+  const geo = new THREE.RingGeometry(.12, .15, 36);
+  geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  const mat = new THREE.MeshBasicMaterial({ color:0x00ff88, side:THREE.DoubleSide });
+  xrReticle = new THREE.Mesh(geo, mat);
+  xrReticle.matrixAutoUpdate = false;
+  xrReticle.visible = false;
+  scene.add(xrReticle);
+}
+
+/* ─────────────────────────────────────────────
+   CUT DEPTH SYSTEM
+   Moves the clip plane inward and shows/hides
+   the correct cut-face rings.
+───────────────────────────────────────────── */
+// Plane constants: how far the plane is from origin (positive = further back = less cut)
+const CUT_CONSTANTS = [100, 1.50, 1.36, 1.22, 1.16, 1.10, 1.04, 0.70, 0.20];
+// Layer names for HUD
+const LAYER_NAMES   = ['—','SCALP','CRÁNEO','DURA','ARACH','PIA','CORTEZA','S.BLANCA','TUMOR'];
+
+function setCutDepth(depth) {
+  G.cutDepth = depth;
+  const c = CUT_CONSTANTS[Math.min(depth, 8)];
+  cutPlane.constant = c;
+
+  // Assign clipping planes: layers with index < depth get clipped
+  layerMeshes.forEach((m, i) => {
+    if (depth > 0 && i < depth) {
+      m.material.clippingPlanes = [cutPlane];
+    } else {
+      m.material.clippingPlanes = [];
+    }
+    m.material.needsUpdate = true;
+  });
+
+  // Position of the cut cross-section face in brain-local Z
+  const faceZ = c > 10 ? 999 : c * 0.91;
+
+  cutFaces.forEach(m => {
+    if (depth === 0) {
+      m.visible = false;
+      if (m.material) { m.material.opacity = 0; m.material.needsUpdate = true; }
+      return;
+    }
+
+    if (m.userData.isCutFace) {
+      const li = m.userData.layerIdx;
+      // Show ring if this layer has been cut through (li >= depth means NOT yet exposed)
+      // Actually: show ring for layers 0..depth-1 (they've been cut)
+      // AND for all inner layers (depth..7) since they're now visible through the hole
+      const show = true; // all rings shown — outer ones show the cut edge, inner ones visible through
+      const targetOp = li < depth
+        ? (li === 3 ? .62 : .92)          // cut-edge ring
+        : (li < depth + 3 ? .75 : .50);   // inner layers seen through opening
+
+      m.visible = true;
+      m.material.opacity = targetOp;
+      m.material.transparent = true;
+      m.material.needsUpdate = true;
+
+      // Orient face perpendicular to camera / cut plane
+      m.position.set(0, 0, faceZ - .008);
+      m.lookAt(new THREE.Vector3(0, 0, faceZ + 1));
+    }
+
+    if (m.userData.isBloodPool) {
+      m.visible = depth > 0;
+      m.material.opacity = depth > 0 ? .7 : 0;
+      m.material.needsUpdate = true;
+      m.position.set(0, 0, faceZ);
+      m.lookAt(new THREE.Vector3(0, 0, faceZ + 1));
+    }
+  });
+
+  // Tumor glow
+  if (depth >= 6 && !G.tumorRemoved) {
+    tumorMesh.material.opacity = .95;
+    tumorGlow.material.opacity = .14;
+    G.tumorLight.intensity = 1.2;
+    arrowMesh.visible = true;
+  }
+
+  // Depth strip HUD
+  for (let i = 0; i < 8; i++) {
+    const el = document.getElementById('d'+i);
+    if (el) {
+      el.classList.toggle('active', i === depth-1);
+      el.style.background = i < depth ? 'rgba(0,212,255,.18)' : 'transparent';
+    }
+  }
+
+  // Layer name in HUD
+  document.getElementById('lval').textContent = LAYER_NAMES[Math.min(depth, 8)];
+  // Highlight info panel row
+  document.querySelectorAll('.ilayer').forEach((el,i) => el.classList.toggle('active-layer', i === depth-1));
+}
+
+/* ─────────────────────────────────────────────
+   ANIMATION LOOP
+───────────────────────────────────────────── */
+function animate() {
+  renderer.setAnimationLoop(renderLoop);
+}
+
+function renderLoop(timestamp, xrFrame) {
+  const t = clock.getElapsedTime();
+
+  if (brainGroup) {
+    brainGroup.position.y = Math.sin(t*.65) * .025;
+    if (!G.isDragging && !G.xrActive) brainGroup.rotation.y += .0015;
+
+    if (G.cutDepth >= 6 && !G.tumorRemoved) {
+      const p = .92 + Math.sin(t*3.5)*.08;
+      tumorMesh.scale.setScalar(p);
+      tumorGlow.scale.setScalar(p*1.12);
+      G.tumorLight.intensity = .7 + Math.sin(t*3.5)*.35;
+    }
+    if (arrowMesh && arrowMesh.visible) arrowMesh.position.z = Math.sin(t*2)*.025;
+  }
+
+  // XR HIT-TEST
+  if (G.xrActive && xrFrame && G.xrHitSource) {
+    const hitResults = xrFrame.getHitTestResults(G.xrHitSource);
+    if (hitResults.length > 0) {
+      const hit = hitResults[0];
+      const pose = hit.getPose(G.xrRefSpace);
+      if (pose) {
+        xrReticle.visible = true;
+        xrReticle.matrix.fromArray(pose.transform.matrix);
+        G.reticlePose = pose;
+      }
+    } else {
+      xrReticle.visible = false;
+      G.reticlePose = null;
+    }
+  }
+
+  // Blood particles
+  bloodParticles = bloodParticles.filter(b => {
+    b.life -= .04; b.mesh.position.add(b.vel); b.vel.y -= .007;
+    b.mesh.material.opacity = Math.max(0, b.life);
+    if (b.life <= 0) { brainGroup.remove(b.mesh); return false; }
+    return true;
+  });
+
+  renderer.render(scene, cam);
+}
+
+/* ─────────────────────────────────────────────
+   WEBXR AR  —  Real immersive-ar session
+───────────────────────────────────────────── */
+async function startAR() {
+  if (G.xrActive) { stopAR(); return; }
+
+  if (!navigator.xr) {
+    showARInfo(
+      'WebXR NO DISPONIBLE',
+      `Tu navegador/dispositivo no soporta WebXR AR.<br><br>
+      <strong>Requisitos:</strong><br>
+      • Android: Chrome 81+ con ARCore<br>
+      • iOS 16+: Safari con soporte WebXR<br>
+      • Servidor HTTPS (GitHub Pages funciona)<br><br>
+      Puedes usar la simulación 3D sin AR.`
+    );
+    return;
+  }
+
+  let supported = false;
+  try { supported = await navigator.xr.isSessionSupported('immersive-ar'); } catch(e) {}
+
+  if (!supported) {
+    showARInfo(
+      'AR NO SOPORTADA EN ESTE DISPOSITIVO',
+      `Este dispositivo no soporta RA inmersiva.<br><br>
+      <strong>Para AR real necesitas:</strong><br>
+      • Android con Google ARCore instalado<br>
+      • Chrome for Android (v81+)<br>
+      • O iPhone/iPad con iOS 16+ en Safari<br><br>
+      Continúa usando la simulación 3D interactiva.`
+    );
+    return;
+  }
+
+  try {
+    const session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['dom-overlay', 'light-estimation'],
+      domOverlay: { root: document.body },
+    });
+
+    G.xrSession = session;
+    G.xrActive = true;
+
+    // Remove desktop bg when in AR (camera pass-through takes over)
+    scene.background = null;
+
+    renderer.xr.setReferenceSpaceType('local');
+    await renderer.xr.setSession(session);
+
+    G.xrRefSpace = await session.requestReferenceSpace('local');
+    const viewerSpace = await session.requestReferenceSpace('viewer');
+    G.xrHitSource = await session.requestHitTestSource({ space: viewerSpace });
+
+    // Place brain on tap
+    session.addEventListener('select', onXRSelect);
+    session.addEventListener('end', () => {
+      G.xrActive = false; G.xrPlaced = false;
+      G.xrHitSource = null; G.xrSession = null;
+      xrReticle.visible = false;
+      scene.background = new THREE.Color(0x04080f);
+      document.getElementById('ar-btn').classList.remove('active');
+      document.getElementById('ar-label').textContent = 'INICIAR RA';
+      document.getElementById('reticle-msg').style.display = 'none';
+      showAlert('RA cerrada', false);
+    });
+
+    document.getElementById('ar-btn').classList.add('active');
+    document.getElementById('ar-label').textContent = 'CERRAR RA';
+    document.getElementById('reticle-msg').style.display = 'block';
+
+    // Scale brain down for real-world AR (heads are ~18–20cm)
+    brainGroup.scale.setScalar(0.12);
+    brainGroup.rotation.set(0, 0, 0);
+
+    showAlert('📱 RA activa — mueve hasta ver el anillo verde, luego toca para colocar', false);
+
+  } catch (err) {
+    console.error('XR Error:', err);
+    showARInfo(
+      'ERROR AL INICIAR RA',
+      `No se pudo iniciar la sesión AR.<br><br>
+      Error: <em>${err.message || err}</em><br><br>
+      Asegúrate de acceder vía <strong>HTTPS</strong> y que el dispositivo tenga ARCore/ARKit.`
+    );
+  }
+}
+
+function stopAR() {
+  if (G.xrSession) G.xrSession.end();
+}
+
+function onXRSelect(event) {
+  if (!G.reticlePose) return;
+
+  if (!G.xrPlaced) {
+    // First tap: place brain at reticle position
+    const m = G.reticlePose.transform.matrix;
+    brainGroup.position.set(m[12], m[13] + 0.10, m[14]); // +10cm up from surface
+    brainGroup.rotation.y = Math.atan2(m[8], m[10]);
+    xrReticle.visible = false;
+    G.xrPlaced = true;
+    document.getElementById('reticle-msg').style.display = 'none';
+    showAlert('🧠 Cerebro anclado — toca el modelo para incidir', false);
+    if (G.step === 0) goStep(1);
+  } else {
+    // Subsequent taps: perform cut at center of view
+    performCut(window.innerWidth/2, window.innerHeight/2);
+  }
+}
+
+function showARInfo(title, body) {
+  document.getElementById('ai-title').textContent = title;
+  document.getElementById('ai-body').innerHTML = body;
+  document.getElementById('ar-info').style.display = 'block';
+}
+function closeARInfo() { document.getElementById('ar-info').style.display = 'none'; }
+
+/* ─────────────────────────────────────────────
+   BLOOD PARTICLES
+───────────────────────────────────────────── */
+function spawnBlood(pos3D, count) {
+  for (let i = 0; i < count; i++) {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(.01 + Math.random()*.014, 4, 4),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(.5+Math.random()*.2, 0, 0), transparent:true, opacity:.9 })
+    );
+    m.position.copy(pos3D);
+    brainGroup.add(m);
+    bloodParticles.push({
+      mesh: m, life: .8 + Math.random()*.4,
+      vel: new THREE.Vector3((Math.random()-.5)*.04, Math.random()*.03, (Math.random()-.5)*.04)
+    });
+  }
+}
+
+/* ─────────────────────────────────────────────
+   STEP SYSTEM
+───────────────────────────────────────────── */
+function buildStepList() {
+  const el = document.getElementById('slist'); el.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'si' + (i===0?' active':' locked');
+    d.id = 'si'+i;
+    const toolHint = s.tool ? `<div class="si-tool">🔧 ${TOOL_LABELS[s.tool]}</div>` : '';
+    d.innerHTML = `<span class="sn">${i+1}</span><div class="si-body"><div>${s.icon} ${s.label}</div>${toolHint}</div>`;
+    el.appendChild(d);
+  });
+}
+
+function goStep(idx) {
+  G.step = idx;
+  STEPS.forEach((_, i) => {
+    const el = document.getElementById('si'+i);
+    if (!el) return;
+    el.className = 'si' + (i<idx ? ' done' : i===idx ? ' active' : ' locked');
+  });
+  const s = STEPS[idx];
+  document.getElementById('instr').textContent = '▶ ' + s.instr;
+  document.getElementById('sval').textContent = (idx+1)+'/'+STEPS.length;
+  document.getElementById('pfill').style.width = (idx/(STEPS.length-1)*100) + '%';
+  document.getElementById('ppct').textContent = Math.round(idx/(STEPS.length-1)*100) + '%';
+  document.getElementById('ainfo').textContent = s.ainfo;
+  setCutDepth(s.cut);
+
+  // Set required tool and highlight it
+  if (s.tool) {
+    setTool(s.tool);
+    // Badge on required tool button
+    document.querySelectorAll('.tb').forEach(b => b.classList.remove('required'));
+    const tb = document.getElementById('t-'+s.tool);
+    if (tb) tb.classList.add('required');
+  }
+
+  // Flash layer name
+  const ln = ['','SCALP','CRÁNEO','DURAMADRE','ARACNOIDES','PIAMADRE','CORTEZA','S. BLANCA','TUMOR GBM'];
+  if (ln[Math.min(idx, 8)] && idx > 0) flashLabel(ln[Math.min(idx, 8)]);
+}
+
+function jumpLayer(idx) {
+  // For exploration: let user peek at any layer
+  setCutDepth(idx+1);
+}
+
+function flashLabel(txt) {
+  const cols = ['#c87040','#e8dcc0','#c8ddc0','#b0ccee','#ddbb88','#dd7777','#ddd0f0','#ffdd00'];
+  const el = document.getElementById('llabel');
+  el.style.color = cols[Math.max(0, Math.min(G.step-1, 7))];
+  el.textContent = txt; el.style.opacity = '1';
+  setTimeout(() => el.style.opacity = '0', 1800);
+}
+
+/* ─────────────────────────────────────────────
+   CUT / INCISION
+───────────────────────────────────────────── */
+function performCut(sx, sy) {
+  const step = G.step;
+  if (step === 0) {
+    showAlert('Primero coloca el modelo con INICIAR RA', true);
+    return;
+  }
+
+  // Validate tool
+  const required = STEPS[step].tool;
+  if (required && G.tool !== required) {
+    addError(`Necesitas: ${TOOL_LABELS[required]}`);
+    return;
+  }
+
+  // Raycast for 3D hit position (blood spawn)
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(
+    ((sx - rect.left)/rect.width)*2-1,
+    -((sy - rect.top)/rect.height)*2+1
+  ), cam);
+  const hits = ray.intersectObjects(layerMeshes, false);
+  const hp = hits.length > 0
+    ? hits[0].point.clone().sub(brainGroup.position)
+    : new THREE.Vector3(0, 0, 1.2);
+
+  if (step >= 1 && step <= 5) {
+    spawnBlood(hp, 14);
+    flashCut(sx, sy, step);
+    setTimeout(() => goStep(step + 1), 1500);
+
+  } else if (step === 6) {
+    // Identify tumor
+    showAlert('🎯 TUMOR IDENTIFICADO — GBM Grado IV OMS', false);
+    setTimeout(() => goStep(7), 1200);
+
+  } else if (step === 7 && !G.tumorRemoved) {
+    removeTumor(hp);
+
+  } else if (step === 8) {
+    closeSurgery();
+  }
+}
+
+function flashCut(sx, sy, step) {
+  ic.width = window.innerWidth; ic.height = window.innerHeight;
+  ctx2.save();
+  const sp = 26 + step * 4;
+  ctx2.beginPath();
+  ctx2.moveTo(sx - sp, sy + (Math.random()-.5)*8);
+  ctx2.lineTo(sx + sp, sy + (Math.random()-.5)*8);
+  ctx2.strokeStyle = step <= 2 ? 'rgba(215,55,55,.9)' : 'rgba(220,140,55,.85)';
+  ctx2.lineWidth = 2.5; ctx2.lineCap = 'round';
+  ctx2.shadowBlur = 14; ctx2.shadowColor = step<=2 ? 'rgba(255,0,0,.5)' : 'rgba(255,160,0,.5)';
+  ctx2.stroke();
+  for (let i = 0; i < 5; i++) {
+    ctx2.beginPath();
+    ctx2.moveTo(sx+(-16+i*8), sy);
+    ctx2.lineTo(sx+(-14+i*7)+(Math.random()-.5)*4, sy+10+Math.random()*22);
+    ctx2.strokeStyle = `rgba(180,0,0,${.25+Math.random()*.4})`;
+    ctx2.lineWidth = 1.5; ctx2.stroke();
+  }
+  ctx2.restore();
+  renderer.domElement.style.filter = 'brightness(1.5)';
+  setTimeout(() => { renderer.domElement.style.filter = ''; ctx2.clearRect(0,0,ic.width,ic.height); }, 260);
+}
+
+function removeTumor(hp) {
+  showAlert('⚡ ASPIRADOR — Extracción en progreso...', false);
+  let sc = 1;
+  const iv = setInterval(() => {
+    sc -= .04;
+    if (sc <= .05) {
+      tumorMesh.material.opacity = 0; tumorGlow.material.opacity = 0;
+      G.tumorLight.intensity = 0; arrowMesh.visible = false; G.tumorRemoved = true;
+      clearInterval(iv);
+      showAlert('✅ TUMOR EXTIRPADO — Resección completa', false);
+      setTimeout(() => goStep(8), 1800);
+    } else {
+      tumorMesh.scale.setScalar(sc); tumorGlow.scale.setScalar(sc*1.1);
+      spawnBlood(hp, 3);
+    }
+  }, 35);
+}
+
+function closeSurgery() {
+  setCutDepth(0);
+  showAlert('🧵 CIERRE POR CAPAS — Sutura dural y craneal', false);
+  setTimeout(() => {
+    STEPS.forEach((_, i) => { const e=document.getElementById('si'+i); if(e) e.className='si done'; });
+    document.getElementById('pfill').style.width = '100%';
+    document.getElementById('ppct').textContent = '100%';
+    document.getElementById('instr').textContent = '✅ PROCEDIMIENTO COMPLETADO CON ÉXITO';
+    const el = Math.floor((Date.now()-G.startTime)/1000);
+    document.getElementById('mmet').textContent =
+      `TIEMPO: ${fmt(el)}  |  ERRORES: ${G.errors}  |  PASOS: 9/9`;
+    setTimeout(() => { document.getElementById('modal').style.display='flex'; }, 2000);
+  }, 1600);
+}
+
+/* ─────────────────────────────────────────────
+   TOOLS
+───────────────────────────────────────────── */
+function setTool(id) {
+  G.tool = id;
+  document.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('t-'+id);
+  if (el) el.classList.add('active');
+  const hints = {
+    scalpel:  'BISTURÍ: Arrastra para incidir — trazo preciso sobre la capa',
+    drill:    'TREPANO: Aplica sobre el cráneo para apertura ósea craneal',
+    micro:    'MICROSCOPIO: Identifica el tumor GBM por fluorescencia',
+    aspirator:'ASPIRADOR US: Aplica sobre el tumor para extracción',
+    coag:     'COAGULADOR BIPOLAR: Sella vasos sangrantes — arrítmico',
+    suture:   'SUTURA: Cierra herida capa por capa anatómica',
+    rotate:   'ROTAR: Arrastra para explorar el modelo 3D',
+  };
+  document.getElementById('hint').textContent = hints[id] || '';
+}
+
+/* ─────────────────────────────────────────────
+   UI CONTROLS
+───────────────────────────────────────────── */
+function togglePanel(which) {
+  G.panelOpen[which] = !G.panelOpen[which];
+  document.getElementById('panel-'+which).classList.toggle('open', G.panelOpen[which]);
+}
+function toggleToolbar() {
+  G.toolbarHidden = !G.toolbarHidden;
+  document.getElementById('toolbar').classList.toggle('hidden', G.toolbarHidden);
+  document.getElementById('toolbar-tab').textContent = G.toolbarHidden ? '▲ INSTRUMENTOS' : '▼ OCULTAR';
+}
+
+/* ─────────────────────────────────────────────
+   MOUSE / TOUCH INTERACTION
+───────────────────────────────────────────── */
+const canvas3 = document.getElementById('c');
+let mouseDown = false, downPos = {x:0,y:0};
+
+canvas3.addEventListener('mousedown', e => {
+  mouseDown=true; G.isDragging=false;
+  G.mx=e.clientX; G.my=e.clientY; downPos={x:e.clientX,y:e.clientY};
+});
+canvas3.addEventListener('mousemove', e => {
+  if (!mouseDown) return;
+  const dx=e.clientX-G.mx, dy=e.clientY-G.my;
+  if (Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y) > 6) {
+    G.isDragging = true;
+    if (G.tool==='rotate' || G.step===0) {
+      brainGroup.rotation.y += dx*.012; brainGroup.rotation.x += dy*.012;
+    } else if (['scalpel','aspirator','coag','drill'].includes(G.tool)) {
+      drawTrail(e.clientX, e.clientY);
+    }
+  }
+  G.mx=e.clientX; G.my=e.clientY;
+});
+canvas3.addEventListener('mouseup', e => {
+  mouseDown=false;
+  if (!G.isDragging && G.started && G.step>0) performCut(e.clientX, e.clientY);
+  G.isDragging=false; clearTrail();
+});
+canvas3.addEventListener('wheel', e => {
+  cam.position.z = Math.max(2, Math.min(9, cam.position.z + e.deltaY*.006));
+}, {passive:true});
+
+canvas3.addEventListener('touchstart', e => {
+  e.preventDefault(); G.isDragging=false;
+  if (e.touches.length===1) {
+    G.mx=e.touches[0].clientX; G.my=e.touches[0].clientY;
+    downPos={x:G.mx,y:G.my}; mouseDown=true;
+  }
+  if (e.touches.length===2)
+    G.touchDist = Math.hypot(e.touches[1].clientX-e.touches[0].clientX, e.touches[1].clientY-e.touches[0].clientY);
+},{passive:false});
+
+canvas3.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length===1) {
+    const t=e.touches[0];
+    const dx=t.clientX-G.mx, dy=t.clientY-G.my;
+    if (Math.hypot(t.clientX-downPos.x, t.clientY-downPos.y)>8) {
+      G.isDragging=true;
+      if (G.tool==='rotate'||G.step===0) {
+        brainGroup.rotation.y+=dx*.014; brainGroup.rotation.x+=dy*.014;
+      } else if (['scalpel','aspirator','coag','drill'].includes(G.tool)) {
+        drawTrail(t.clientX, t.clientY);
+      }
+    }
+    G.mx=t.clientX; G.my=t.clientY;
+  }
+  if (e.touches.length===2) {
+    const d = Math.hypot(e.touches[1].clientX-e.touches[0].clientX, e.touches[1].clientY-e.touches[0].clientY);
+    cam.position.z = Math.max(2, Math.min(9, cam.position.z+(G.touchDist-d)*.01));
+    G.touchDist=d;
+  }
+},{passive:false});
+
+canvas3.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (!G.isDragging && G.started && G.step>0 && e.changedTouches.length===1)
+    performCut(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  mouseDown=false; G.isDragging=false; clearTrail();
+},{passive:false});
+
+// Double-tap to advance step
+let lastTap = 0;
+canvas3.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 300 && G.started && G.step < STEPS.length-1) {
+    goStep(G.step+1);
+  }
+  lastTap = now;
+},{passive:false});
+
+function drawTrail(x, y) {
+  trailPts.push({x,y});
+  ic.width=window.innerWidth; ic.height=window.innerHeight;
+  ctx2.clearRect(0,0,ic.width,ic.height);
+  if (trailPts.length > 1) {
+    ctx2.save();
+    ctx2.beginPath();
+    ctx2.moveTo(trailPts[0].x, trailPts[0].y);
+    for (let i=1; i<trailPts.length; i++) ctx2.lineTo(trailPts[i].x, trailPts[i].y);
+    ctx2.strokeStyle = G.tool==='coag' ? 'rgba(255,200,50,.8)' : 'rgba(255,50,50,.8)';
+    ctx2.lineWidth=2.5; ctx2.lineCap='round'; ctx2.lineJoin='round';
+    ctx2.shadowBlur=10; ctx2.shadowColor=G.tool==='coag'?'rgba(255,180,0,.5)':'rgba(220,0,0,.5)';
+    ctx2.stroke(); ctx2.restore();
+  }
+  clearTimeout(trailTmr);
+  trailTmr = setTimeout(clearTrail, 900);
+}
+function clearTrail() { trailPts=[]; ctx2.clearRect(0,0,ic.width,ic.height); }
+
+/* ─────────────────────────────────────────────
+   MISC
+───────────────────────────────────────────── */
+function addError(msg) { G.errors++; document.getElementById('eval').textContent=G.errors; showAlert('⚠ '+msg, true); }
+function showAlert(msg, isErr) {
+  const el=document.createElement('div'); el.className='alert';
+  el.style.borderColor=isErr?'var(--red)':'var(--green)';
+  el.style.color=isErr?'var(--red)':'var(--green)';
+  el.textContent=msg; document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2600);
+}
+
+let timerIv;
+function startTimer() {
+  G.startTime=Date.now();
+  timerIv=setInterval(()=>{
+    const e=document.getElementById('tval');
+    if(e) e.textContent=fmt(Math.floor((Date.now()-G.startTime)/1000));
+  },1000);
+}
+function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+
+function qsel(el,q){
+  el.closest('.qo').querySelectorAll('.qb').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel'); G.answers[q]=el.textContent;
+}
+function submitQ(){
+  const el=Math.floor((Date.now()-G.startTime)/1000);
+  document.getElementById('rbox').style.display='block';
+  document.getElementById('rcont').innerHTML=`
+    <div class="rr"><span>Tiempo</span><span class="rv">${fmt(el)}</span></div>
+    <div class="rr"><span>Errores</span><span class="rv" style="color:${G.errors>0?'var(--red)':'var(--green)'}">${G.errors}</span></div>
+    <div class="rr"><span>Pasos</span><span class="rv">9/9</span></div>
+    <div class="rr"><span>Dificultad</span><span class="rv">${G.answers.q1||'N/A'}</span></div>
+    <div class="rr"><span>Realismo</span><span class="rv">${G.answers.q2||'N/A'}</span></div>
+    <div class="rr"><span>Utilidad</span><span class="rv">${G.answers.q3||'N/A'}</span></div>
+    <div class="rr"><span>Recomendación</span><span class="rv">${G.answers.q4||'N/A'}</span></div>
+    <div style="margin-top:8px;font-size:8px;color:rgba(255,255,255,.25)">${new Date().toLocaleString('es-MX')}</div>`;
+  document.querySelector('.msub').textContent='✅ EVALUACIÓN REGISTRADA';
+  document.querySelector('.msub').disabled=true;
+}
+
+/* ─────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────── */
+document.getElementById('startbtn').addEventListener('click', () => {
+  const sp=document.getElementById('splash');
+  sp.style.opacity='0'; sp.style.transition='opacity .6s';
+  setTimeout(()=>{
+    sp.style.display='none';
+    G.started=true;
+    buildStepList();
+    initThree();
+    startTimer();
+    goStep(0);
+    // Panels start closed — brain fills the screen
+  },600);
+});
+
+window.addEventListener('keydown', e => {
+  const m={KeyS:'scalpel',KeyD:'drill',KeyM:'micro',KeyA:'aspirator',KeyC:'coag',KeyT:'suture',KeyR:'rotate'};
+  if(m[e.code]) setTool(m[e.code]);
+  if(e.code==='Space'&&G.started&&G.step>0){e.preventDefault();performCut(innerWidth/2,innerHeight/2);}
+  if(e.code==='ArrowRight'&&G.started&&G.step<STEPS.length-1) goStep(G.step+1);
+  if(e.code==='KeyP') togglePanel('steps');
+  if(e.code==='KeyO') togglePanel('info');
+});
+
+window.addEventListener('resize',()=>{
+  if(!renderer) return;
+  cam.aspect=innerWidth/innerHeight; cam.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  ic.width=innerWidth; ic.height=innerHeight;
+});
+</script>
+</body>
+</html>
