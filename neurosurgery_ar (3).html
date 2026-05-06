@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>NeuroSim XR</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+:root{
+  --neon:#00d4ff;--green:#00ff88;--red:#ff3366;--yellow:#ffdd00;
+  --bg:#060c14;--panel:rgba(4,10,22,0.93);--border:rgba(0,212,255,0.2);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;
+  font-family:'Rajdhani',sans-serif;color:#ddeeff;touch-action:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:1;cursor:crosshair}
+#ic{position:fixed;inset:0;pointer-events:none;z-index:45}
+
+/* ── SPLASH ── */
+#splash{position:fixed;inset:0;z-index:300;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.slogo{font-family:'Orbitron',monospace;font-size:clamp(20px,6vw,52px);font-weight:900;
+  background:linear-gradient(135deg,#00d4ff 0%,#00ff88 45%,#ff4488 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:5px}
+.ssub{font-family:'Share Tech Mono',monospace;font-size:clamp(8px,2vw,11px);
+  color:var(--neon);letter-spacing:4px;opacity:.6}
+.splash-img{width:160px;height:160px;position:relative;margin:6px 0}
+.splash-img svg{width:100%;height:100%}
+.scanline{position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--neon),transparent);
+  box-shadow:0 0 8px var(--neon);animation:sl 1.8s linear infinite}
+@keyframes sl{0%{top:0}100%{top:100%}}
+.sbtn{background:transparent;border:1.5px solid var(--neon);color:var(--neon);
+  font-family:'Orbitron',monospace;font-size:12px;letter-spacing:3px;
+  padding:12px 34px;cursor:pointer;transition:.3s;
+  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);
+  position:relative;overflow:hidden}
+.sbtn::before{content:'';position:absolute;inset:0;background:var(--neon);
+  transform:scaleX(0);transform-origin:left;transition:.3s;z-index:-1}
+.sbtn:hover{color:var(--bg)}.sbtn:hover::before{transform:scaleX(1)}
+.swarn{font-size:10px;color:rgba(255,255,255,.28);text-align:center;max-width:300px;line-height:1.7}
+
+/* ── PROGRESS ── */
+#pbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:100;background:rgba(0,212,255,.1)}
+#pfill{height:100%;background:var(--neon);box-shadow:0 0 6px var(--neon);transition:width .6s;width:0}
+
+/* ── HUD ── */
+#hud{position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;background:linear-gradient(180deg,rgba(0,0,0,.88),transparent);
+  pointer-events:none}
+.htitle{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:3px;
+  color:var(--neon);text-shadow:0 0 8px var(--neon)}
+.hrow{display:flex;gap:7px;pointer-events:auto}
+.hm{border:1px solid var(--border);background:rgba(0,0,0,.6);
+  padding:2px 8px;display:flex;flex-direction:column;align-items:center}
+.hml{font-size:7px;color:rgba(255,255,255,.33);letter-spacing:1px}
+.hmv{font-size:13px;font-family:'Share Tech Mono',monospace}
+
+/* ── INSTRUCTION BOX (center bottom) ── */
+#ibox{position:fixed;bottom:92px;left:50%;transform:translateX(-50%);
+  z-index:50;width:min(520px,92vw);
+  background:var(--panel);border:1px solid var(--border);
+  border-top:3px solid var(--neon);padding:12px 18px;text-align:center;
+  pointer-events:none;transition:border-color .4s}
+#ibox.ready{border-top-color:var(--green);animation:pulse-box 1.5s ease-in-out infinite}
+@keyframes pulse-box{0%,100%{box-shadow:0 0 0px rgba(0,255,136,0)}50%{box-shadow:0 0 18px rgba(0,255,136,.25)}}
+#step-num{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;
+  color:var(--neon);margin-bottom:3px}
+#step-instr{font-family:'Share Tech Mono',monospace;font-size:12px;
+  color:var(--yellow);line-height:1.5;margin-bottom:4px}
+#step-tool-hint{font-size:11px;color:var(--green);letter-spacing:1px}
+#step-detail{font-size:10px;color:rgba(255,255,255,.45);margin-top:4px;line-height:1.5}
+
+/* ── TOOLBAR right side ── */
+#toolbar{position:fixed;right:10px;top:50%;transform:translateY(-50%);
+  z-index:50;display:flex;flex-direction:column;gap:5px}
+.tb{width:50px;height:50px;border:1px solid var(--border);background:var(--panel);
+  color:#555;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:1px;font-size:7px;letter-spacing:.4px;transition:.25s;position:relative}
+.tb svg{width:20px;height:20px;transition:.25s}
+.tb.active{border-color:var(--neon);color:var(--neon);background:rgba(0,212,255,.12);
+  box-shadow:0 0 14px rgba(0,212,255,.25)}
+.tb.required{border-color:var(--yellow)!important;color:var(--yellow)!important;
+  background:rgba(255,221,0,.1)!important;
+  animation:treq 1.2s ease-in-out infinite}
+@keyframes treq{
+  0%,100%{box-shadow:0 0 6px rgba(255,221,0,.2);transform:scale(1)}
+  50%{box-shadow:0 0 22px rgba(255,221,0,.8);transform:scale(1.06)}}
+.tb:hover:not(.required){border-color:var(--neon);color:var(--neon)}
+.tb .tip{position:absolute;right:54px;top:50%;transform:translateY(-50%);
+  background:var(--panel);border:1px solid var(--border);
+  padding:3px 8px;font-size:9px;color:#fff;white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .2s;letter-spacing:.5px}
+.tb:hover .tip{opacity:1}
+
+/* ── LAYER STACK (left side) ── */
+#lstack{position:fixed;left:10px;top:50%;transform:translateY(-50%);
+  z-index:50;display:flex;flex-direction:column;gap:3px}
+.ls-item{display:flex;align-items:center;gap:6px;padding:4px 8px;
+  background:var(--panel);border:1px solid var(--border);
+  font-size:10px;color:rgba(255,255,255,.3);transition:.4s;cursor:default;
+  border-left:2px solid transparent;min-width:130px}
+.ls-item.current{border-left-color:var(--neon);color:var(--neon);
+  background:rgba(0,212,255,.08)}
+.ls-item.opened{color:rgba(255,255,255,.5);border-left-color:var(--green)}
+.ls-item.locked{opacity:.4}
+.ls-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ls-status{margin-left:auto;font-size:9px}
+
+/* ── AR button ── */
+#ar-btn{position:fixed;top:10px;right:10px;z-index:100;
+  background:rgba(0,0,0,.75);border:1.5px solid var(--neon);
+  color:var(--neon);font-family:'Orbitron',monospace;
+  font-size:9px;letter-spacing:2px;padding:8px 13px;cursor:pointer;transition:.3s}
+#ar-btn:hover{background:var(--neon);color:var(--bg)}
+#ar-btn.ar-active{border-color:var(--red);color:var(--red)}
+
+/* ── LAYER FLASH ── */
+#llabel{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);
+  z-index:150;pointer-events:none;opacity:0;transition:opacity .35s;
+  font-family:'Orbitron',monospace;font-size:clamp(16px,4vw,32px);
+  letter-spacing:6px;font-weight:900;text-align:center;white-space:nowrap;
+  text-shadow:0 0 30px currentColor}
+
+/* ── ALERT ── */
+.alert{position:fixed;top:55px;left:50%;transform:translateX(-50%);z-index:200;
+  background:rgba(2,8,20,.96);border:1px solid;padding:8px 20px;
+  font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;
+  animation:pa .3s ease;pointer-events:none;white-space:nowrap;max-width:92vw}
+@keyframes pa{0%{opacity:0;transform:translate(-50%,-6px)}100%{opacity:1;transform:translate(-50%,0)}}
+
+/* ── XR MSG ── */
+#xr-msg{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:52;font-family:'Share Tech Mono',monospace;font-size:12px;
+  color:var(--green);letter-spacing:3px;text-align:center;
+  text-shadow:0 0 8px var(--green);pointer-events:none}
+
+/* ── AR INFO ── */
+#ar-info{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:200;background:var(--panel);border:1px solid var(--neon);
+  padding:22px;max-width:320px;font-size:11px;line-height:1.8;text-align:center}
+.ai-t{font-family:'Orbitron',monospace;font-size:12px;color:var(--neon);
+  margin-bottom:10px;letter-spacing:2px}
+.ai-c{background:transparent;border:1px solid var(--neon);color:var(--neon);
+  font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;
+  padding:6px 16px;cursor:pointer;margin-top:12px;transition:.2s}
+.ai-c:hover{background:var(--neon);color:var(--bg)}
+
+/* ── CORNERS ── */
+.cd{position:fixed;z-index:49;width:36px;height:36px;
+  border-color:rgba(0,212,255,.22);border-style:solid;pointer-events:none}
+.cd.tl{top:5px;left:5px;border-width:2px 0 0 2px}
+.cd.tr{top:5px;right:5px;border-width:2px 2px 0 0}
+.cd.bl{bottom:5px;left:5px;border-width:0 0 2px 2px}
+.cd.br{bottom:5px;right:5px;border-width:0 2px 2px 0}
+
+/* ── MODAL ── */
+#modal{display:none;position:fixed;inset:0;z-index:300;
+  background:rgba(0,0,0,.92);align-items:center;justify-content:center}
+.mbox{background:var(--bg);border:1px solid var(--border);border-top:3px solid var(--neon);
+  padding:22px;width:min(420px,92vw);max-height:82vh;overflow-y:auto}
+.mt{font-family:'Orbitron',monospace;font-size:12px;letter-spacing:3px;color:var(--neon);margin-bottom:12px}
+.qi{margin:9px 0}.ql{font-size:11px;margin-bottom:5px;color:rgba(255,255,255,.68)}
+.qo{display:flex;gap:4px;flex-wrap:wrap}
+.qb{padding:4px 10px;border:1px solid var(--border);background:transparent;color:#666;
+  cursor:pointer;font-size:10px;font-family:'Rajdhani',sans-serif;transition:.2s}
+.qb.sel{border-color:var(--neon);color:var(--neon);background:rgba(0,212,255,.07)}
+.msub{width:100%;padding:10px;background:var(--neon);border:none;color:var(--bg);
+  font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;margin-top:12px}
+.rbox{border:1px solid var(--border);padding:10px;margin-top:12px;display:none}
+.rr{display:flex;justify-content:space-between;padding:3px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);font-size:10px}
+.rv{color:var(--green)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="ic"></canvas>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="slogo">NEUROSIM XR</div>
+  <div class="ssub">SIMULADOR DE NEUROCIRUGÍA AUMENTADA</div>
+  <div class="splash-img">
+    <div class="scanline"></div>
+    <svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="bg1" cx="50%" cy="42%" r="52%">
+          <stop offset="0%" stop-color="#ff9999" stop-opacity=".9"/>
+          <stop offset="100%" stop-color="#881111" stop-opacity=".1"/>
+        </radialGradient>
+        <filter id="gf"><feGaussianBlur stdDeviation="2"/></filter>
+      </defs>
+      <!-- Concentric layer rings -->
+      <ellipse cx="80" cy="76" rx="58" ry="52" fill="none" stroke="#c87040" stroke-width="3" opacity=".7"/>
+      <ellipse cx="80" cy="76" rx="51" ry="45" fill="none" stroke="#e8dcc0" stroke-width="2.5" opacity=".6"/>
+      <ellipse cx="80" cy="76" rx="44" ry="38" fill="none" stroke="#c8ddc0" stroke-width="2" opacity=".55"/>
+      <ellipse cx="80" cy="76" rx="38" ry="32" fill="none" stroke="#a8c8ee" stroke-width="1.8" opacity=".5"/>
+      <ellipse cx="80" cy="76" rx="32" ry="26" fill="none" stroke="#ddbb88" stroke-width="1.5" opacity=".45"/>
+      <ellipse cx="80" cy="76" rx="26" ry="20" fill="url(#bg1)" stroke="#dd7777" stroke-width="2" opacity=".85"/>
+      <path d="M34 68Q44 56 58 62Q66 48 80 56Q94 42 108 58Q120 52 126 68" fill="none" stroke="#ff5555" stroke-width="1.5" opacity=".55"/>
+      <path d="M30 83Q44 74 58 80Q68 70 80 76Q92 66 106 74Q118 70 128 82" fill="none" stroke="#ff5555" stroke-width="1.2" opacity=".4"/>
+      <ellipse cx="80" cy="132" rx="30" ry="16" fill="url(#bg1)" stroke="#dd9966" stroke-width="1" opacity=".5"/>
+      <circle cx="100" cy="66" r="8" fill="none" stroke="#ffdd00" stroke-width="2" stroke-dasharray="3,2" filter="url(#gf)">
+        <animate attributeName="r" values="8;12;8" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <text x="100" y="70" text-anchor="middle" font-size="7" fill="#ffdd00" font-family="monospace">GBM</text>
+      <!-- Bisturi icon -->
+      <line x1="14" y1="44" x2="50" y2="44" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/>
+      <polygon points="50,40 62,44 50,48" fill="rgba(0,212,255,.5)"/>
+      <text x="10" y="40" font-size="7" fill="rgba(0,212,255,.6)" font-family="monospace">BISTURÍ</text>
+    </svg>
+  </div>
+  <button class="sbtn" id="startbtn">▶ INICIAR SIMULACIÓN</button>
+  <div class="swarn">
+    Cada herramienta abre una capa del cerebro.<br>
+    Sigue las instrucciones en pantalla paso a paso.<br>
+    <span style="color:rgba(0,212,255,.5)">ARRASTRA sobre el modelo para operar.</span>
+  </div>
+</div>
+
+<!-- UI ELEMENTS -->
+<div id="pbar"><div id="pfill"></div></div>
+<div class="cd tl"></div><div class="cd tr"></div>
+<div class="cd bl"></div><div class="cd br"></div>
+
+<div id="hud">
+  <div class="htitle">⬡ NEUROSIM XR</div>
+  <div class="hrow">
+    <div class="hm"><span class="hml">TIEMPO</span>
+      <span class="hmv" id="tval" style="color:var(--green)">00:00</span></div>
+    <div class="hm"><span class="hml">PASO</span>
+      <span class="hmv" id="sval" style="color:var(--neon)">1/8</span></div>
+    <div class="hm"><span class="hml">ERRORES</span>
+      <span class="hmv" id="eval" style="color:var(--red)">0</span></div>
+  </div>
+</div>
+
+<button id="ar-btn" onclick="startAR()">📱 MODO AR</button>
+
+<!-- LAYER STACK left -->
+<div id="lstack"></div>
+
+<!-- TOOLBAR right -->
+<div id="toolbar">
+  <button class="tb" id="t-rotate" onclick="setTool('rotate')">
+    <div class="tip">Rotar (R)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+    </svg>ROTAR
+  </button>
+  <button class="tb" id="t-scalpel" onclick="setTool('scalpel')">
+    <div class="tip">Bisturí (S)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M3 21L18 6"/><path d="M15 9L20 4"/><circle cx="4" cy="20" r="1.3" fill="currentColor"/>
+    </svg>BISTURÍ
+  </button>
+  <button class="tb" id="t-drill" onclick="setTool('drill')">
+    <div class="tip">Trepano (D)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M14 2l-2 2-8 8 2 2 8-8 2-2-2-2z"/><path d="M8 12l-6 6v2h2l6-6"/>
+      <circle cx="17" cy="5" r="2"/>
+    </svg>TREPANO
+  </button>
+  <button class="tb" id="t-micro" onclick="setTool('micro')">
+    <div class="tip">Microscopio (M)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="8" r="3.5"/><path d="M12 11.5v7"/><path d="M8 19h8"/><path d="M10 19v2h4v-2"/>
+    </svg>MICRO
+  </button>
+  <button class="tb" id="t-aspirator" onclick="setTool('aspirator')">
+    <div class="tip">Aspirador (A)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+    </svg>ASPIR.
+  </button>
+  <button class="tb" id="t-coag" onclick="setTool('coag')">
+    <div class="tip">Coagulador (C)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>COAG.
+  </button>
+  <button class="tb" id="t-suture" onclick="setTool('suture')">
+    <div class="tip">Sutura (T)</div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M4 20Q9 12 14 12Q17 12 20 4"/><circle cx="20" cy="4" r="1.5"/>
+    </svg>SUTURA
+  </button>
+</div>
+
+<!-- INSTRUCTION BOX -->
+<div id="ibox">
+  <div id="step-num">PASO 1 DE 8</div>
+  <div id="step-instr">Cargando...</div>
+  <div id="step-tool-hint"></div>
+  <div id="step-detail"></div>
+</div>
+
+<div id="llabel"></div>
+<div id="xr-msg">Mueve el dispositivo para detectar superficie<br>
+  <small style="font-size:9px;opacity:.5">Apunta al suelo o mesa y toca para colocar</small></div>
+
+<!-- AR INFO -->
+<div id="ar-info">
+  <div class="ai-t" id="ai-t">REALIDAD AUMENTADA</div>
+  <div id="ai-b" style="color:rgba(255,255,255,.62);font-size:11px;line-height:1.8"></div>
+  <button class="ai-c" onclick="document.getElementById('ar-info').style.display='none'">CERRAR</button>
+</div>
+
+<!-- MODAL -->
+<div id="modal">
+  <div class="mbox">
+    <div class="mt">⬡ EVALUACIÓN POST-OPERATORIA</div>
+    <div id="mmet" style="font-family:'Share Tech Mono',monospace;font-size:10px;margin-bottom:12px;color:var(--green)"></div>
+    <div class="qi"><div class="ql">1. Dificultad del procedimiento:</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q1')">Muy fácil</button>
+        <button class="qb" onclick="qsel(this,'q1')">Moderado</button>
+        <button class="qb" onclick="qsel(this,'q1')">Difícil</button>
+        <button class="qb" onclick="qsel(this,'q1')">Muy difícil</button>
+      </div></div>
+    <div class="qi"><div class="ql">2. Realismo del modelo:</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q2')">★★☆☆☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★★☆☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★★★☆</button>
+        <button class="qb" onclick="qsel(this,'q2')">★★★★★</button>
+      </div></div>
+    <div class="qi"><div class="ql">3. Utilidad educativa:</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q3')">Poca</button>
+        <button class="qb" onclick="qsel(this,'q3')">Media</button>
+        <button class="qb" onclick="qsel(this,'q3')">Alta</button>
+        <button class="qb" onclick="qsel(this,'q3')">Excelente</button>
+      </div></div>
+    <div class="qi"><div class="ql">4. ¿Lo recomendarías?</div>
+      <div class="qo">
+        <button class="qb" onclick="qsel(this,'q4')">No</button>
+        <button class="qb" onclick="qsel(this,'q4')">Tal vez</button>
+        <button class="qb" onclick="qsel(this,'q4')">Sí</button>
+        <button class="qb" onclick="qsel(this,'q4')">Definitivamente</button>
+      </div></div>
+    <button class="msub" onclick="submitQ()">REGISTRAR EVALUACIÓN</button>
+    <div class="rbox" id="rbox">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--green);margin-bottom:7px">REPORTE</div>
+      <div id="rcont"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  NEUROSIM XR — Simulación con capas que se abren físicamente
+//  MODO SIMULACIÓN funciona sin AR — cada acción abre la capa
+// ══════════════════════════════════════════════════════════════════
+
+/* ══ DATOS DE CAPAS ══ */
+const LAYER_DATA = [
+  {
+    id:0, name:'SCALP', label:'Cuero cabelludo',
+    color:0xc87040, emi:0x180800, rough:0.88, metal:0.02, radius:1.56, noise:0.055, oct:4,
+    openDist:1.1,   // how far top/bottom halves separate
+    desc:'Piel, tejido conectivo, gálea aponeurótica, tejido laxo y pericráneo.',
+    dotColor:'#c87040'
+  },
+  {
+    id:1, name:'CRÁNEO', label:'Hueso craneal',
+    color:0xe8dcc0, emi:0x0a0800, rough:0.78, metal:0.04, radius:1.41, noise:0.018, oct:2,
+    openDist:0.95,
+    desc:'Dos tablas óseas con diploé. Grosor 6–8mm. Requiere sierra oscilante.',
+    dotColor:'#e8dcc0'
+  },
+  {
+    id:2, name:'DURAMADRE', label:'Meninge externa',
+    color:0xc8ddc0, emi:0x081008, rough:0.55, metal:0.0, radius:1.31, noise:0.012, oct:2,
+    openDist:0.80,
+    desc:'Meninge dura y fibrosa. Apertura cuidadosa en C. Contiene senos venosos.',
+    dotColor:'#c8ddc0'
+  },
+  {
+    id:3, name:'ARACNOIDES', label:'Meninge media',
+    color:0xa8c8ee, emi:0x040610, rough:0.20, metal:0.0, radius:1.26, noise:0.008, oct:1,
+    openDist:0.65,
+    desc:'Membrana avascular translúcida. Espacio subaracnoideo con LCR y arterias.',
+    dotColor:'#a8c8ee'
+  },
+  {
+    id:4, name:'PIAMADRE', label:'Meninge interna',
+    color:0xddbb88, emi:0x100800, rough:0.45, metal:0.0, radius:1.22, noise:0.006, oct:1,
+    openDist:0.50,
+    desc:'Meninge muy vascular adherida a la corteza. Límite directo con el parénquima.',
+    dotColor:'#ddbb88'
+  },
+  {
+    id:5, name:'CORTEZA', label:'Sustancia gris',
+    color:0xdd7777, emi:0x220808, rough:0.82, metal:0.0, radius:1.18, noise:0.075, oct:6,
+    openDist:0.38,
+    desc:'6 capas neuronales, 2–4mm. Giros y surcos. Función motora, sensorial y cognitiva.',
+    dotColor:'#dd7777'
+  },
+  {
+    id:6, name:'S. BLANCA', label:'Sustancia blanca',
+    color:0xddd0f0, emi:0x080810, rough:0.62, metal:0.0, radius:0.96, noise:0.030, oct:3,
+    openDist:0.28,
+    desc:'Axones mielinizados. Tractos de asociación y proyección. Aquí reside el tumor.',
+    dotColor:'#ddd0f0'
+  },
+];
+
+/* ══ PASOS QUIRÚRGICOS ══ */
+// toolNeeded: null=ninguna, string=requerida
+// action: qué capa abrir (-1=ninguna)
+const STEPS = [
+  {
+    num:1, title:'INCISIÓN CUTÁNEA',
+    toolNeeded:'scalpel',
+    instr:'Selecciona el BISTURÍ y ARRASTRA sobre el cuero cabelludo',
+    toolHint:'🔪 Usa el Bisturí (tecla S) — arrastra sobre el modelo',
+    detail:'Incisión lineal bicoronal sobre el scalp. El bisturí separa la piel del cráneo.',
+    layerAction:0,   // open layer 0 (scalp)
+    successMsg:'✅ SCALP abierto — Cráneo expuesto'
+  },
+  {
+    num:2, title:'CRANEOTOMÍA',
+    toolNeeded:'drill',
+    instr:'Selecciona el TREPANO y ARRASTRA sobre el hueso craneal',
+    toolHint:'⚙️ Usa el Trepano (tecla D) — perfora el cráneo',
+    detail:'Trepanación + sierra oscilante. Se eleva el flap óseo revelando la duramadre.',
+    layerAction:1,
+    successMsg:'✅ CRÁNEO retirado — Duramadre visible'
+  },
+  {
+    num:3, title:'APERTURA DURAMADRE',
+    toolNeeded:'scalpel',
+    instr:'Selecciona el BISTURÍ y ARRASTRA sobre la duramadre (capa verdosa)',
+    toolHint:'🔪 Usa el Bisturí (tecla S) — incide en forma de C',
+    detail:'Apertura dural con cuidado. Evitar senos venosos sagital y transverso.',
+    layerAction:2,
+    successMsg:'✅ DURAMADRE abierta — Aracnoides visible'
+  },
+  {
+    num:4, title:'APERTURA ARACNOIDES',
+    toolNeeded:'scalpel',
+    instr:'Selecciona el BISTURÍ y ARRASTRA sobre la aracnoides (capa azul-translúcida)',
+    toolHint:'🔪 Usa el Bisturí (tecla S) — microtijeras sobre la membrana',
+    detail:'Apertura libera LCR. Cuidado con arterias cerebrales visibles en el espacio.',
+    layerAction:3,
+    successMsg:'✅ ARACNOIDES abierta — Piamadre expuesta'
+  },
+  {
+    num:5, title:'SEPARAR PIAMADRE',
+    toolNeeded:'scalpel',
+    instr:'Selecciona el BISTURÍ y ARRASTRA sobre la piamadre (capa dorada)',
+    toolHint:'🔪 Usa el Bisturí (tecla S) — separación cuidadosa',
+    detail:'Piamadre adherida a la corteza. Coagulación bipolar para hemostasia.',
+    layerAction:4,
+    successMsg:'✅ PIAMADRE separada — Corteza cerebral expuesta'
+  },
+  {
+    num:6, title:'IDENTIFICAR TUMOR',
+    toolNeeded:'micro',
+    instr:'Selecciona el MICROSCOPIO y toca la corteza para localizar el tumor',
+    toolHint:'🔬 Usa el Microscopio (tecla M) — busca la zona amarilla',
+    detail:'Microscopio intraoperatorio + 5-ALA fluorescencia. El GBM brilla en amarillo.',
+    layerAction:5,
+    successMsg:'🎯 TUMOR GBM IDENTIFICADO — Fluorescencia positiva'
+  },
+  {
+    num:7, title:'EXTIRPAR TUMOR GBM',
+    toolNeeded:'aspirator',
+    instr:'Selecciona el ASPIRADOR y ARRASTRA sobre el tumor amarillo',
+    toolHint:'💊 Usa el Aspirador US (tecla A) — CUSA sobre el GBM',
+    detail:'Aspirador ultrasónico CUSA. Resección máxima segura >98%. Neuronavegación activa.',
+    layerAction:6,
+    successMsg:'✅ TUMOR EXTIRPADO — Resección completa >98%'
+  },
+  {
+    num:8, title:'HEMOSTASIA Y CIERRE',
+    toolNeeded:'coag',
+    instr:'Selecciona el COAGULADOR, sella los vasos y luego usa SUTURA para cerrar',
+    toolHint:'⚡ Usa el Coagulador (tecla C) → después Sutura (tecla T)',
+    detail:'Coagulación bipolar + Surgicel. Sutura dural hermética. Reimplante óseo. Cierre por capas.',
+    layerAction:-1,
+    successMsg:'✅ CIRUGÍA COMPLETADA — Paciente estabilizado'
+  },
+];
+
+/* ══ THREE.JS GLOBALS ══ */
+let scene, cam, renderer, clock;
+let brainGroup;
+// layers3d[i] = { top, bot, cap, data, state:'closed'|'opening'|'open', topY, botY }
+let layers3d = [];
+let tumorGroup, tumorMesh, tumorGlow, tumorLight;
+let arrowMesh;
+let bloodParts = [];
+let xrSession=null, xrHitSrc=null, xrRefSpace=null;
+let xrReticle, xrPlaced=false;
+
+/* ══ APP STATE ══ */
+let currentStep = 0;  // 0-based index into STEPS
+let currentTool = 'rotate';
+let errors = 0;
+let startTime = null;
+let stepInProgress = false;
+let isDragging = false, mx=0, my=0, downPos={x:0,y:0}, touchDist=0;
+let answers = {};
+const ic=document.getElementById('ic'), ctx2=ic.getContext('2d');
+let trailPts=[], trailTmr=null;
+
+/* ══ NOISE ══ */
+function hh(n){const s=Math.sin(n)*43758.5453;return s-Math.floor(s);}
+function n3(x,y,z){
+  const i=Math.floor(x),j=Math.floor(y),k=Math.floor(z);
+  const u=x-i,v=y-j,w=z-k;
+  const uu=u*u*(3-2*u),vv=v*v*(3-2*v),ww=w*w*(3-2*w);
+  const a=hh(i+hh(j+hh(k))),b=hh(i+1+hh(j+hh(k))),
+        c=hh(i+hh(j+1+hh(k))),d=hh(i+1+hh(j+1+hh(k))),
+        e=hh(i+hh(j+hh(k+1))),f=hh(i+1+hh(j+hh(k+1))),
+        g=hh(i+hh(j+1+hh(k+1))),ii=hh(i+1+hh(j+1+hh(k+1)));
+  return a+uu*(b-a)+vv*(c-a)+uu*vv*(a-b-c+d)+
+    ww*(e-a+uu*(a-b-e+f)+vv*(a-c-e+g)+uu*vv*(-a+b+c-d+e-f-g+ii))-.5;
+}
+function fbm(x,y,z,o){let v=0,a=.5,f=1;for(let i=0;i<o;i++){v+=a*n3(x*f,y*f,z*f);a*=.5;f*=2;}return v;}
+
+/* ══ GEOMETRY ══ */
+function makeHalfSphere(radius, seed, noise, oct, upper){
+  // upper=true → top half (y≥0), upper=false → bottom half (y≤0)
+  const phiLen = Math.PI/2;
+  const phiSt  = upper ? 0 : Math.PI/2;
+  const geo = new THREE.SphereGeometry(radius, 72, 48, 0, Math.PI*2, phiSt, phiLen);
+  const pos = geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    const l=Math.sqrt(x*x+y*y+z*z);
+    if(l<.001)continue;
+    const nx=x/l,ny=y/l,nz=z/l;
+    const d=fbm(nx*3+seed,ny*3,nz*3,oct)*noise+fbm(nx*7+seed,ny*6,nz*6,2)*noise*.3;
+    const nr=radius+d;
+    pos.setXYZ(i,nx*nr,ny*nr*.88,nz*nr*.91);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Cross-section disc — shows inner anatomy when layer opens
+function makeCapDisc(outerR, innerR){
+  const geo = new THREE.RingGeometry(innerR*0.875, outerR*0.875, 72);
+  // Add colour gradient inner→outer matching next layer
+  const pos=geo.attributes.position, vc=[];
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),y=pos.getY(i);
+    const n=n3(Math.atan2(y,x)*3+i,Math.sqrt(x*x+y*y)*2,0)*.012;
+    pos.setX(i,x+n); pos.setY(i,y+n);
+    // color varies by radial position
+    vc.push(1,1,1); // white base — material color handles it
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/* ══ INIT ══ */
+function initThree(){
+  const W=innerWidth, H=innerHeight;
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x060c14);
+  scene.fog=new THREE.FogExp2(0x060c14,.042);
+
+  cam=new THREE.PerspectiveCamera(50,W/H,.001,200);
+  cam.position.set(0,.4,6.2);
+
+  renderer=new THREE.WebGLRenderer({
+    canvas:document.getElementById('c'),
+    antialias:true,alpha:true
+  });
+  renderer.setSize(W,H);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.3;
+  renderer.xr.enabled=true;
+
+  clock=new THREE.Clock();
+  buildLights();
+  buildBrain();
+  buildEnv();
+  buildXRReticle();
+  renderer.setAnimationLoop(loop);
+}
+
+function buildLights(){
+  scene.add(new THREE.AmbientLight(0x1a2a3a,1.1));
+  const key=new THREE.SpotLight(0xf5faff,4.5,20,Math.PI/5,.28,1.2);
+  key.position.set(0,8,3);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
+  scene.add(key);scene.add(key.target);
+  const fill=new THREE.DirectionalLight(0xffe8cc,.7);fill.position.set(-4,2,3);scene.add(fill);
+  const rim=new THREE.DirectionalLight(0x88ccff,.5);rim.position.set(2,-1,-5);scene.add(rim);
+}
+
+/* ══ BUILD BRAIN ══ */
+function buildBrain(){
+  brainGroup=new THREE.Group();
+  brainGroup.rotation.x=.06;
+  scene.add(brainGroup);
+  layers3d=[];
+
+  LAYER_DATA.forEach((ld,idx)=>{
+    const mat=()=>new THREE.MeshPhysicalMaterial({
+      color:ld.color, emissive:ld.emi, emissiveIntensity:.35,
+      roughness:ld.rough, metalness:ld.metal,
+      clearcoat: idx===3?.85:idx===4?.55:.18,
+      clearcoatRoughness:.3,
+      transparent:idx===3, opacity:idx===3?.72:1.0,
+      side:THREE.FrontSide,
+    });
+
+    const topGeo=makeHalfSphere(ld.radius,idx*37.3,ld.noise,ld.oct,true);
+    const botGeo=makeHalfSphere(ld.radius,idx*37.3+100,ld.noise,ld.oct,false);
+
+    // Cortex gets vertex-color veins
+    if(idx===5){
+      [topGeo,botGeo].forEach(geo=>{
+        const vc=[],pos=geo.attributes.position;
+        for(let v=0;v<pos.count;v++){
+          const x=pos.getX(v),y=pos.getY(v),z=pos.getZ(v);
+          const vn=fbm(x*9,y*9,z*9,3);
+          vc.push(.85+vn*.13,.42+vn*.06,.42+vn*.06);
+        }
+        geo.setAttribute('color',new THREE.Float32BufferAttribute(vc,3));
+      });
+    }
+
+    const topM=()=>{const m=mat();if(idx===5){m.vertexColors=true;}return m;}
+    const top=new THREE.Mesh(topGeo,topM());
+    const bot=new THREE.Mesh(botGeo,topM());
+    top.castShadow=bot.castShadow=true;
+    top.receiveShadow=bot.receiveShadow=true;
+
+    // Cap disc — cross-section ring
+    const nextR = idx<LAYER_DATA.length-1 ? LAYER_DATA[idx+1].radius : 0;
+    const capGeo=makeCapDisc(ld.radius, nextR);
+    const capMat=new THREE.MeshPhysicalMaterial({
+      color:ld.color, emissive:ld.emi, emissiveIntensity:.55,
+      roughness:.38, metalness:0, side:THREE.DoubleSide,
+      transparent:true, opacity:0,
+    });
+    const cap=new THREE.Mesh(capGeo,capMat);
+    cap.rotation.x=-Math.PI/2; // face camera
+    cap.visible=false;
+
+    brainGroup.add(top,bot,cap);
+    layers3d.push({top,bot,cap,data:ld,state:'closed',topY:0,botY:0,tY:0,bY:0});
+  });
+
+  buildVessels();
+  buildTumor();
+  buildCerebellum();
+  buildBrainstem();
+
+  // Tumor arrow
+  arrowMesh=new THREE.ArrowHelper(
+    new THREE.Vector3(-1,-.5,-.5).normalize(),
+    new THREE.Vector3(.9,.48,.65),.38,0xffdd00,.09,.07
+  );
+  arrowMesh.visible=false;
+  brainGroup.add(arrowMesh);
+
+  buildLayerStackUI();
+}
+
+function buildVessels(){
+  const vm=new THREE.LineBasicMaterial({color:0xcc2222,transparent:true,opacity:.55});
+  [[[-.2,.5,1.1],[.1,.6,1.05],[.5,.55,.95],[.8,.4,.8]],
+   [[-.8,.7,.5],[-.4,.9,.7],[0,1,.6],[.4,.9,.7]],
+   [[.3,.3,-1],[.6,0,-.9],[.8,-.3,-.7]],
+   [[-.5,.2,1],[-.6,-.1,.95],[-.7,-.4,.8]]
+  ].forEach(pts=>{
+    const c=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(p[0]*1.19,p[1]*1.04,p[2]*1.09)));
+    brainGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(c.getPoints(20)),vm));
+  });
+  const vm2=new THREE.LineBasicMaterial({color:0xee3333,transparent:true,opacity:.72});
+  const main=[[-1.1,0,.3],[-.9,.3,.7],[-.5,.5,1],[0,.55,1.1],[.5,.5,.95],[.9,.3,.65],[1.1,0,.3]];
+  const mc=new THREE.CatmullRomCurve3(main.map(p=>new THREE.Vector3(p[0]*1.2,p[1]*1.05,p[2]*1.1)));
+  brainGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(mc.getPoints(36)),vm2));
+}
+
+function buildTumor(){
+  tumorGroup=new THREE.Group();
+  tumorGroup.position.set(.38,.15,.18);
+  brainGroup.add(tumorGroup);
+  const tg=new THREE.SphereGeometry(.22,48,36);
+  const tp=tg.attributes.position;
+  for(let i=0;i<tp.count;i++){
+    const x=tp.getX(i),y=tp.getY(i),z=tp.getZ(i);
+    const l=Math.sqrt(x*x+y*y+z*z);
+    const nx=x/l,ny=y/l,nz=z/l;
+    const d=fbm(nx*5+99,ny*5,nz*5,4)*.07+fbm(nx*12,ny*12+99,nz*10,2)*.025;
+    tp.setXYZ(i,nx*(.22+d),ny*(.22+d),nz*(.22+d));
+  }
+  tg.computeVertexNormals();
+  tumorMesh=new THREE.Mesh(tg,new THREE.MeshPhysicalMaterial({
+    color:0xddcc00,emissive:0xaa6600,emissiveIntensity:.6,
+    roughness:.35,metalness:.1,transparent:true,opacity:0
+  }));
+  tumorGlow=new THREE.Mesh(
+    new THREE.SphereGeometry(.3,24,18),
+    new THREE.MeshBasicMaterial({color:0xffaa00,transparent:true,opacity:0,side:THREE.BackSide})
+  );
+  tumorLight=new THREE.PointLight(0xff8800,0,1.3);
+  tumorGroup.add(tumorMesh,tumorGlow,tumorLight);
+}
+
+function buildCerebellum(){
+  const geo=makeHalfSphere(.58,200,.065,5,true);
+  const pos=geo.attributes.position;
+  for(let i=0;i<pos.count;i++){pos.setY(i,pos.getY(i)*.56);pos.setZ(i,pos.getZ(i)*.66);}
+  geo.computeVertexNormals();
+  const mat=new THREE.MeshPhysicalMaterial({color:0xdd9988,roughness:.82});
+  const top=new THREE.Mesh(geo,mat);
+  top.position.set(0,-1.14,-.3);top.castShadow=true;brainGroup.add(top);
+  const geo2=makeHalfSphere(.58,201,.065,5,false);
+  const pos2=geo2.attributes.position;
+  for(let i=0;i<pos2.count;i++){pos2.setY(i,pos2.getY(i)*.56);pos2.setZ(i,pos2.getZ(i)*.66);}
+  geo2.computeVertexNormals();
+  const bot=new THREE.Mesh(geo2,mat.clone());
+  bot.position.set(0,-1.14,-.3);bot.castShadow=true;brainGroup.add(bot);
+}
+
+function buildBrainstem(){
+  const geo=new THREE.CylinderGeometry(.14,.20,.82,22);
+  const pos=geo.attributes.position;
+  for(let i=0;i<pos.count;i++)pos.setZ(i,pos.getZ(i)+pos.getY(i)*.08);
+  geo.computeVertexNormals();
+  const m=new THREE.Mesh(geo,new THREE.MeshPhysicalMaterial({color:0xcc9977,roughness:.65}));
+  m.position.set(0,-1.5,.05);m.rotation.x=.15;m.castShadow=true;brainGroup.add(m);
+}
+
+function buildEnv(){
+  const grid=new THREE.GridHelper(30,30,0x001133,0x000c22);
+  grid.position.y=-2.2;grid.material.transparent=true;grid.material.opacity=.28;
+  scene.add(grid);
+  const pg=new THREE.BufferGeometry();
+  const pp=new Float32Array(350*3);
+  for(let i=0;i<350;i++){pp[i*3]=(Math.random()-.5)*25;pp[i*3+1]=(Math.random()-.5)*25;pp[i*3+2]=(Math.random()-.5)*25;}
+  pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
+  scene.add(new THREE.Points(pg,new THREE.PointsMaterial({color:0x00d4ff,size:.04,transparent:true,opacity:.2})));
+}
+
+function buildXRReticle(){
+  const geo=new THREE.RingGeometry(.1,.13,36);
+  geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  xrReticle=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x00ff88,side:THREE.DoubleSide}));
+  xrReticle.matrixAutoUpdate=false;xrReticle.visible=false;
+  scene.add(xrReticle);
+}
+
+/* ══ LAYER STACK UI ══ */
+function buildLayerStackUI(){
+  const cont=document.getElementById('lstack');
+  cont.innerHTML='';
+  LAYER_DATA.forEach((ld,i)=>{
+    const el=document.createElement('div');
+    el.className='ls-item locked';el.id='lsi'+i;
+    el.innerHTML=`<div class="ls-dot" style="background:${ld.dotColor}"></div>
+      <span>${ld.name}</span><span class="ls-status" id="lss"+${i}>🔒</span>`;
+    cont.appendChild(el);
+  });
+  // Tumor row
+  const tr=document.createElement('div');
+  tr.className='ls-item locked';tr.id='lsi7';
+  tr.innerHTML=`<div class="ls-dot" style="background:#ffdd00"></div>
+    <span>TUMOR GBM</span><span class="ls-status" id="lss7">🔒</span>`;
+  cont.appendChild(tr);
+}
+
+function markLayerOpen(idx){
+  const el=document.getElementById('lsi'+idx);
+  if(el){el.classList.remove('locked','current');el.classList.add('opened');}
+  const st=document.getElementById('lss'+idx);
+  if(st)st.textContent='✓';
+}
+function markLayerCurrent(idx){
+  document.querySelectorAll('.ls-item').forEach(e=>e.classList.remove('current'));
+  const el=document.getElementById('lsi'+idx);
+  if(el){el.classList.remove('locked');el.classList.add('current');}
+}
+
+/* ══ OPEN LAYER ANIMATION ══ */
+function openLayer(idx){
+  if(idx<0||idx>=layers3d.length)return;
+  const L=layers3d[idx];
+  if(L.state==='open'||L.state==='opening')return;
+  L.state='opening';
+  L.tY=L.data.openDist;
+  L.bY=-L.data.openDist;
+  // Show cap
+  L.cap.visible=true;
+  L.cap.material.opacity=.92;
+  // If last layer, show tumor
+  if(idx>=6){
+    tumorMesh.material.opacity=.95;
+    tumorGlow.material.opacity=.16;
+    tumorLight.intensity=1.2;
+    arrowMesh.visible=true;
+    markLayerCurrent(7);
+  }
+  markLayerOpen(idx);
+  flashLabel(L.data.name, L.data.color);
+  setTimeout(()=>{L.state='open';},1400);
+}
+
+/* ══ RENDER LOOP ══ */
+function loop(ts, xrFrame){
+  const t=clock.getElapsedTime();
+
+  if(brainGroup){
+    brainGroup.position.y=Math.sin(t*.6)*.022;
+    if(!isDragging) brainGroup.rotation.y+=.0013;
+
+    // Animate layer opening
+    layers3d.forEach(L=>{
+      if(L.state==='opening'||L.state==='open'){
+        L.topY+=(L.tY-L.topY)*.09;
+        L.botY+=(L.bY-L.botY)*.09;
+        L.top.position.y=L.topY;
+        L.bot.position.y=L.botY;
+      }
+    });
+
+    // Tumor pulse
+    if(tumorMesh.material.opacity>.4){
+      const p=.92+Math.sin(t*3.5)*.08;
+      tumorMesh.scale.setScalar(p);
+      tumorGlow.scale.setScalar(p*1.1);
+      tumorLight.intensity=.7+Math.sin(t*3.5)*.35;
+    }
+    if(arrowMesh.visible) arrowMesh.position.z=Math.sin(t*2)*.025;
+  }
+
+  // Blood
+  bloodParts=bloodParts.filter(b=>{
+    b.life-=.04;b.mesh.position.add(b.vel);b.vel.y-=.007;
+    b.mesh.material.opacity=Math.max(0,b.life);
+    if(b.life<=0){brainGroup.remove(b.mesh);return false;}return true;
+  });
+
+  // XR hit-test
+  if(xrSession&&xrFrame&&xrHitSrc){
+    const hits=xrFrame.getHitTestResults(xrHitSrc);
+    if(hits.length>0){
+      const pose=hits[0].getPose(xrRefSpace);
+      if(pose){xrReticle.visible=true;xrReticle.matrix.fromArray(pose.transform.matrix);xrReticle.userData.pose=pose;}
+    }else{xrReticle.visible=false;xrReticle.userData.pose=null;}
+  }
+
+  renderer.render(scene,cam);
+}
+
+/* ══ BLOOD PARTICLES ══ */
+function spawnBlood(pos3D,count){
+  for(let i=0;i<count;i++){
+    const m=new THREE.Mesh(
+      new THREE.SphereGeometry(.01+Math.random()*.014,4,4),
+      new THREE.MeshBasicMaterial({color:new THREE.Color(.5+Math.random()*.18,0,0),transparent:true,opacity:.9})
+    );
+    m.position.copy(pos3D);
+    brainGroup.add(m);
+    bloodParts.push({mesh:m,life:.8+Math.random()*.4,
+      vel:new THREE.Vector3((Math.random()-.5)*.04,Math.random()*.03,(Math.random()-.5)*.04)});
+  }
+}
+
+/* ══ STEP SYSTEM ══ */
+function showStep(idx){
+  currentStep=idx;
+  const s=STEPS[idx];
+  const ibox=document.getElementById('ibox');
+
+  document.getElementById('step-num').textContent   = `PASO ${s.num} DE ${STEPS.length}`;
+  document.getElementById('step-instr').textContent = s.instr;
+  document.getElementById('step-tool-hint').textContent = s.toolHint;
+  document.getElementById('step-detail').textContent = s.detail;
+  document.getElementById('sval').textContent = `${s.num}/${STEPS.length}`;
+  document.getElementById('pfill').style.width = `${(s.num-1)/STEPS.length*100}%`;
+
+  // Highlight required tool
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('required','active'));
+  if(s.toolNeeded){
+    const tb=document.getElementById('t-'+s.toolNeeded);
+    if(tb) tb.classList.add('required');
+    // Auto-select the required tool so user sees what's needed
+    currentTool=s.toolNeeded;
+    if(tb) tb.classList.add('active');
+  }
+
+  // Mark current layer
+  if(s.layerAction>=0) markLayerCurrent(s.layerAction);
+
+  // Pulse ibox
+  ibox.classList.remove('ready');
+  void ibox.offsetWidth; // reflow
+  ibox.classList.add('ready');
+
+  stepInProgress=false;
+}
+
+/* ══ PERFORM SURGICAL ACTION ══ */
+// Called on tap or drag-release over the brain
+function performAction(sx, sy){
+  if(stepInProgress)return;
+  const s=STEPS[currentStep];
+
+  // Validate tool
+  if(s.toolNeeded && currentTool!==s.toolNeeded){
+    addError(`Herramienta incorrecta. Necesitas: ${toolName(s.toolNeeded)}`);
+    return;
+  }
+
+  // Raycast
+  const rect=renderer.domElement.getBoundingClientRect();
+  const ray=new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(
+    ((sx-rect.left)/rect.width)*2-1,
+    -((sy-rect.top)/rect.height)*2+1
+  ),cam);
+  // Cast against all closed/opening layer meshes
+  const targets=[];
+  layers3d.forEach(L=>{if(L.state!=='open'){targets.push(L.top,L.bot);}});
+  if(tumorMesh.material.opacity>.4) targets.push(tumorMesh);
+  const hits=ray.intersectObjects(targets,false);
+  const hp=hits.length>0
+    ? hits[0].point.clone().sub(brainGroup.position)
+    : new THREE.Vector3(0,0,1.2);
+
+  stepInProgress=true;
+
+  if(currentStep<=4){ // Steps 0-4: open layers
+    spawnBlood(hp,16);
+    flashCut(sx,sy,currentStep+1);
+    openLayer(s.layerAction);
+    showAlert(s.successMsg, false);
+    setTimeout(()=>{
+      if(currentStep<STEPS.length-1) showStep(currentStep+1);
+    },1500);
+
+  } else if(currentStep===5){ // Identify tumor
+    openLayer(s.layerAction); // open cortex
+    showAlert(s.successMsg, false);
+    setTimeout(()=>showStep(6), 1300);
+
+  } else if(currentStep===6){ // Remove tumor
+    removeTumor(hp, s.successMsg);
+
+  } else if(currentStep===7){ // Closure
+    closeSurgery();
+  }
+}
+
+function removeTumor(hp, msg){
+  showAlert('⚡ ASPIRADOR CUSA — Extracción en progreso...', false);
+  let sc=1;
+  const iv=setInterval(()=>{
+    sc-=.04;
+    if(sc<=.05){
+      tumorMesh.material.opacity=0;tumorGlow.material.opacity=0;
+      tumorLight.intensity=0;arrowMesh.visible=false;
+      clearInterval(iv);
+      const el7=document.getElementById('lsi7');
+      if(el7){el7.classList.remove('current','locked');el7.classList.add('opened');}
+      showAlert(msg, false);
+      setTimeout(()=>showStep(7), 1800);
+    }else{
+      tumorMesh.scale.setScalar(sc);tumorGlow.scale.setScalar(sc*1.1);
+      spawnBlood(hp,3);
+    }
+  },35);
+}
+
+function closeSurgery(){
+  // Close layers back
+  layers3d.forEach(L=>{
+    if(L.state!=='closed'){
+      L.state='opening'; L.tY=0; L.bY=0;
+      setTimeout(()=>{L.state='closed';L.cap.visible=false;L.cap.material.opacity=0;},1000);
+    }
+  });
+  showAlert('🧵 Cerrando por capas — Sutura + reimplante óseo', false);
+  document.getElementById('pfill').style.width='100%';
+  document.getElementById('step-num').textContent='✅ PROCEDIMIENTO COMPLETADO';
+  document.getElementById('step-instr').textContent='Cirugía exitosa. Paciente estabilizado.';
+  document.getElementById('step-tool-hint').textContent='';
+  document.getElementById('step-detail').textContent='Sutura dural hermética. Reimplante de flap óseo. Cierre muscular y cutáneo por capas.';
+  document.getElementById('ibox').classList.remove('ready');
+  const el=Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('mmet').textContent=`TIEMPO: ${fmt(el)}  |  ERRORES: ${errors}  |  8/8 PASOS`;
+  setTimeout(()=>{document.getElementById('modal').style.display='flex';},2500);
+}
+
+/* ══ FLASH CUT ══ */
+function flashCut(sx,sy,step){
+  ic.width=innerWidth;ic.height=innerHeight;
+  ctx2.save();
+  const sp=24+step*5;
+  ctx2.beginPath();
+  ctx2.moveTo(sx-sp,sy+(Math.random()-.5)*8);
+  ctx2.lineTo(sx+sp,sy+(Math.random()-.5)*8);
+  ctx2.strokeStyle=step<=2?'rgba(215,50,50,.9)':'rgba(220,140,50,.88)';
+  ctx2.lineWidth=3.5;ctx2.lineCap='round';
+  ctx2.shadowBlur=18;ctx2.shadowColor=step<=2?'rgba(255,0,0,.55)':'rgba(255,160,0,.55)';
+  ctx2.stroke();
+  for(let i=0;i<7;i++){
+    ctx2.beginPath();ctx2.moveTo(sx+(-20+i*7),sy);
+    ctx2.lineTo(sx+(-18+i*6.5)+(Math.random()-.5)*5,sy+8+Math.random()*28);
+    ctx2.strokeStyle=`rgba(180,0,0,${.2+Math.random()*.45})`;ctx2.lineWidth=1.5;ctx2.stroke();
+  }
+  ctx2.restore();
+  renderer.domElement.style.filter='brightness(1.6) saturate(1.3)';
+  setTimeout(()=>{renderer.domElement.style.filter='';ctx2.clearRect(0,0,ic.width,ic.height);},260);
+}
+
+function flashLabel(txt,col){
+  const el=document.getElementById('llabel');
+  const c=new THREE.Color(col);
+  el.style.color=`rgb(${Math.round(c.r*255)},${Math.round(c.g*255)},${Math.round(c.b*255)})`;
+  el.textContent=txt;el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',2000);
+}
+
+/* ══ TOOLS ══ */
+function setTool(id){
+  currentTool=id;
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('t-'+id)?.classList.add('active');
+}
+function toolName(id){
+  return {scalpel:'Bisturí',drill:'Trepano',micro:'Microscopio',
+    aspirator:'Aspirador',coag:'Coagulador',suture:'Sutura',rotate:'Rotar'}[id]||id;
+}
+
+/* ══ INTERACTION ══ */
+const C=document.getElementById('c');
+let mouseDown=false;
+
+C.addEventListener('mousedown',e=>{
+  mouseDown=true;isDragging=false;
+  mx=e.clientX;my=e.clientY;downPos={x:e.clientX,y:e.clientY};
+});
+C.addEventListener('mousemove',e=>{
+  if(!mouseDown)return;
+  const dx=e.clientX-mx,dy=e.clientY-my;
+  if(Math.hypot(e.clientX-downPos.x,e.clientY-downPos.y)>5){
+    isDragging=true;
+    if(currentTool==='rotate'){
+      brainGroup.rotation.y+=dx*.013;brainGroup.rotation.x+=dy*.013;
+    } else if(['scalpel','drill','aspirator','coag'].includes(currentTool)){
+      drawTrail(e.clientX,e.clientY);
+    }
+  }
+  mx=e.clientX;my=e.clientY;
+});
+C.addEventListener('mouseup',e=>{
+  mouseDown=false;
+  // Any drag OR click triggers the action if correct tool
+  performAction(e.clientX,e.clientY);
+  isDragging=false;clearTrail();
+});
+C.addEventListener('wheel',e=>{
+  cam.position.z=Math.max(2,Math.min(10,cam.position.z+e.deltaY*.006));
+},{passive:true});
+
+C.addEventListener('touchstart',e=>{
+  e.preventDefault();isDragging=false;
+  if(e.touches.length===1){mx=e.touches[0].clientX;my=e.touches[0].clientY;downPos={x:mx,y:my};mouseDown=true;}
+  if(e.touches.length===2) touchDist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+},{passive:false});
+C.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(e.touches.length===1){
+    const t=e.touches[0];const dx=t.clientX-mx,dy=t.clientY-my;
+    if(Math.hypot(t.clientX-downPos.x,t.clientY-downPos.y)>7){
+      isDragging=true;
+      if(currentTool==='rotate'){brainGroup.rotation.y+=dx*.015;brainGroup.rotation.x+=dy*.015;}
+      else if(['scalpel','drill','aspirator','coag'].includes(currentTool)) drawTrail(t.clientX,t.clientY);
+    }
+    mx=t.clientX;my=t.clientY;
+  }
+  if(e.touches.length===2){
+    const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+    cam.position.z=Math.max(2,Math.min(10,cam.position.z+(touchDist-d)*.012));touchDist=d;
+  }
+},{passive:false});
+C.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(e.changedTouches.length===1) performAction(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+  mouseDown=false;isDragging=false;clearTrail();
+},{passive:false});
+
+function drawTrail(x,y){
+  trailPts.push({x,y});ic.width=innerWidth;ic.height=innerHeight;
+  ctx2.clearRect(0,0,ic.width,ic.height);
+  if(trailPts.length>1){
+    ctx2.save();ctx2.beginPath();ctx2.moveTo(trailPts[0].x,trailPts[0].y);
+    for(let i=1;i<trailPts.length;i++) ctx2.lineTo(trailPts[i].x,trailPts[i].y);
+    ctx2.strokeStyle=currentTool==='coag'?'rgba(255,200,50,.85)':'rgba(255,45,45,.85)';
+    ctx2.lineWidth=3.5;ctx2.lineCap='round';ctx2.lineJoin='round';
+    ctx2.shadowBlur=14;ctx2.shadowColor=currentTool==='coag'?'rgba(255,180,0,.5)':'rgba(220,0,0,.5)';
+    ctx2.stroke();ctx2.restore();
+  }
+  clearTimeout(trailTmr);trailTmr=setTimeout(clearTrail,900);
+}
+function clearTrail(){trailPts=[];ctx2.clearRect(0,0,ic.width,ic.height);}
+
+/* ══ AR ══ */
+async function startAR(){
+  if(!navigator.xr){
+    showARInfo('WebXR NO DISPONIBLE',
+      'Chrome en Android con ARCore, o Safari iOS 16+.<br>Necesita HTTPS (GitHub Pages ✓).');
+    return;
+  }
+  let ok=false;
+  try{ok=await navigator.xr.isSessionSupported('immersive-ar');}catch(e){}
+  if(!ok){
+    showARInfo('AR NO SOPORTADA',
+      'Instala Google ARCore (Play Store) y usa Chrome para Android, o iPhone iOS 16+ en Safari.');
+    return;
+  }
+  try{
+    const sess=await navigator.xr.requestSession('immersive-ar',{
+      requiredFeatures:['hit-test'],
+      optionalFeatures:['dom-overlay','light-estimation'],
+      domOverlay:{root:document.body},
+    });
+    xrSession=sess;scene.background=null;
+    renderer.xr.setReferenceSpaceType('local');
+    await renderer.xr.setSession(sess);
+    xrRefSpace=await sess.requestReferenceSpace('local');
+    const vs=await sess.requestReferenceSpace('viewer');
+    xrHitSrc=await sess.requestHitTestSource({space:vs});
+    sess.addEventListener('select',onXRSel);
+    sess.addEventListener('end',()=>{
+      xrSession=null;xrHitSrc=null;xrReticle.visible=false;xrPlaced=false;
+      scene.background=new THREE.Color(0x060c14);
+      document.getElementById('ar-btn').textContent='📱 MODO AR';
+      document.getElementById('ar-btn').classList.remove('ar-active');
+      document.getElementById('xr-msg').style.display='none';
+    });
+    document.getElementById('ar-btn').textContent='❌ CERRAR RA';
+    document.getElementById('ar-btn').classList.add('ar-active');
+    document.getElementById('xr-msg').style.display='block';
+    brainGroup.scale.setScalar(.12);brainGroup.rotation.set(0,0,0);
+    showAlert('📱 RA activa — detecta superficie y toca para anclar',false);
+  }catch(err){
+    showARInfo('ERROR XR',`No se pudo iniciar RA.<br>${err.message||err}<br>Asegúrate de usar HTTPS.`);
+  }
+}
+function onXRSel(){
+  if(!xrPlaced&&xrReticle.userData.pose){
+    const m=xrReticle.userData.pose.transform.matrix;
+    brainGroup.position.set(m[12],m[13]+.10,m[14]);
+    brainGroup.rotation.y=Math.atan2(m[8],m[10]);
+    xrReticle.visible=false;xrPlaced=true;
+    document.getElementById('xr-msg').style.display='none';
+    showAlert('🧠 Cerebro anclado — ahora opera siguiendo los pasos',false);
+  }else if(xrPlaced){
+    performAction(innerWidth/2,innerHeight/2);
+  }
+}
+function showARInfo(t,b){
+  document.getElementById('ai-t').textContent=t;
+  document.getElementById('ai-b').innerHTML=b;
+  document.getElementById('ar-info').style.display='block';
+}
+
+/* ══ MISC ══ */
+function addError(msg){
+  errors++;document.getElementById('eval').textContent=errors;showAlert('⚠ '+msg,true);
+}
+function showAlert(msg,isErr){
+  const el=document.createElement('div');el.className='alert';
+  el.style.borderColor=isErr?'var(--red)':'var(--green)';
+  el.style.color=isErr?'var(--red)':'var(--green)';
+  el.textContent=msg;document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2800);
+}
+
+let timerIv;
+function startTimer(){
+  startTime=Date.now();
+  timerIv=setInterval(()=>{
+    const e=document.getElementById('tval');if(e)e.textContent=fmt(Math.floor((Date.now()-startTime)/1000));
+  },1000);
+}
+function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+
+function qsel(el,q){
+  el.closest('.qo').querySelectorAll('.qb').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');answers[q]=el.textContent;
+}
+function submitQ(){
+  const el=Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('rbox').style.display='block';
+  document.getElementById('rcont').innerHTML=`
+    <div class="rr"><span>Tiempo</span><span class="rv">${fmt(el)}</span></div>
+    <div class="rr"><span>Errores</span><span class="rv" style="color:${errors>0?'var(--red)':'var(--green)'}">${errors}</span></div>
+    <div class="rr"><span>Pasos</span><span class="rv">8/8</span></div>
+    ${Object.entries(answers).map(([k,v])=>`<div class="rr"><span>${k}</span><span class="rv">${v}</span></div>`).join('')}
+    <div style="margin-top:8px;font-size:8px;color:rgba(255,255,255,.22)">${new Date().toLocaleString('es-MX')}</div>`;
+  document.querySelector('.msub').textContent='✅ EVALUADO';
+  document.querySelector('.msub').disabled=true;
+}
+
+/* ══ BOOT ══ */
+document.getElementById('startbtn').addEventListener('click',()=>{
+  const sp=document.getElementById('splash');
+  sp.style.opacity='0';sp.style.transition='opacity .6s';
+  setTimeout(()=>{
+    sp.style.display='none';
+    initThree();
+    startTimer();
+    // Show step 0 immediately
+    showStep(0);
+  },600);
+});
+
+window.addEventListener('keydown',e=>{
+  if(e.code==='KeyS') setTool('scalpel');
+  if(e.code==='KeyD') setTool('drill');
+  if(e.code==='KeyM') setTool('micro');
+  if(e.code==='KeyA') setTool('aspirator');
+  if(e.code==='KeyC') setTool('coag');
+  if(e.code==='KeyT') setTool('suture');
+  if(e.code==='KeyR') setTool('rotate');
+  if(e.code==='Space'){e.preventDefault();performAction(innerWidth/2,innerHeight/2);}
+  if(e.code==='ArrowRight'&&currentStep<STEPS.length-1) showStep(currentStep+1);
+});
+window.addEventListener('resize',()=>{
+  if(!renderer)return;
+  cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  ic.width=innerWidth;ic.height=innerHeight;
+});
+</script>
+</body>
+</html>
